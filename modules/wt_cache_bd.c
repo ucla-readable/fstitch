@@ -71,6 +71,7 @@ static int wt_push_block(struct cache_info * info, bdesc_t * block, uint32_t num
 		return r;
 	slot->block = block;
 	block->cache_number = number;
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_BDESC_NUMBER, block, number, 1);
 	
 	bdesc_retain(block);
 	wt_touch_block(info, slot);

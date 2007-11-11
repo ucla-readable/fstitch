@@ -98,7 +98,6 @@ bdesc_t * bdesc_alloc(uint32_t number, uint32_t blocksize, uint32_t count, page_
 	}
 #endif
 	FSTITCH_DEBUG_SEND(FDB_MODULE_BDESC, FDB_BDESC_ALLOC, bdesc, bdesc, number, count);
-	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_BDESC_NUMBER, bdesc, number, count);
 	bdesc->cache_number = (uint32_t) -1;
 	bdesc->ref_count = 1;
 	bdesc->ar_count = 0;

@@ -21,6 +21,8 @@
 #include <modules/waffle.h>
 #include <modules/waffle_lfs.h>
 
+#define CHECKPOINT_INTERVAL (10 * HZ)
+
 #define WAFFLE_LFS_DEBUG 0
 
 #if WAFFLE_LFS_DEBUG
@@ -100,6 +102,7 @@ struct waffle_info {
 	const struct waffle_super * super;
 	struct waffle_snapshot s_active;
 	struct waffle_bitmap_cache active, checkpoint, snapshot[WAFFLE_SNAPSHOT_COUNT];
+	struct waffle_old_snapshot * last_checkpoint;
 	struct waffle_old_snapshot * old_snapshots;
 	int cloned_since_checkpoint;
 	patch_t * checkpoint_changes;
@@ -127,6 +130,8 @@ static struct blkptr * waffle_get_blkptr(struct waffle_info * info, struct blkpt
 	struct blkptr * blkptr = (struct blkptr *) hash_map_find_val(info->blkptr_map, (void *) number);
 	if(blkptr)
 	{
+		assert(blkptr->block == block);
+		assert(blkptr->parent_offset == parent_offset);
 		blkptr->references++;
 		return blkptr;
 	}
@@ -242,6 +247,8 @@ static int waffle_bitmap_##x##_in_snapshot(struct waffle_info * info, uint32_t n
 			*next = old->next; \
 			if(old->bitmap.bb_cache) \
 				bdesc_release(&old->bitmap.bb_cache); \
+			if(old == info->last_checkpoint) \
+				info->last_checkpoint = NULL; \
 			waffle_snapshot_pool_free(old); \
 			continue; \
 		} \
@@ -435,6 +442,8 @@ static int waffle_in_snapshot(struct waffle_info * info, uint32_t number)
 			*next = old->next;
 			if(old->bitmap.bb_cache)
 				bdesc_release(&old->bitmap.bb_cache);
+			if(old == info->last_checkpoint)
+				info->last_checkpoint = NULL;
 			waffle_snapshot_pool_free(old);
 			continue;
 		}
@@ -470,6 +479,8 @@ static int waffle_can_allocate(struct waffle_info * info, uint32_t number)
 			*next = old->next;
 			if(old->bitmap.bb_cache)
 				bdesc_release(&old->bitmap.bb_cache);
+			if(old == info->last_checkpoint)
+				info->last_checkpoint = NULL;
 			waffle_snapshot_pool_free(old);
 			continue;
 		}
@@ -525,7 +536,7 @@ static struct blkptr * waffle_follow_pointer(struct waffle_info * info, struct b
 /* updates the pointer to this blkptr (mid clone); parent must already be cloned */
 static int waffle_update_pointer(struct waffle_info * info, struct blkptr * blkptr, uint32_t block, int is_bitmap)
 {
-	Dprintf("%s %u -> %u\n", __FUNCTION__, blkptr->number, block);
+	Dprintf("%s %u[%d]: %u -> %u\n", __FUNCTION__, blkptr->parent ? blkptr->parent->number : WAFFLE_SUPER_BLOCK, blkptr->parent_offset, blkptr->number, block);
 	if(blkptr->parent)
 	{
 		assert(is_bitmap || !waffle_in_snapshot(info, blkptr->parent->number));
@@ -550,7 +561,7 @@ static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 /* updates the indicated value on the block pointed to by this blkptr */
 static int waffle_update_value(struct waffle_info * info, struct blkptr * blkptr, const void * pointer, const void * value, size_t size)
 {
-	Dprintf("%s\n", __FUNCTION__);
+	Dprintf("%s %u, [%d]\n", __FUNCTION__, blkptr->number, size);
 	int r;
 	patch_t * patch = NULL;
 	uint32_t offset = ((uintptr_t) pointer) - (uintptr_t) blkptr_data(blkptr);
@@ -580,6 +591,7 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 	struct blkptr * indirect_blkptr;
 	struct blkptr * dindirect_blkptr;
 	inode_offset /= WAFFLE_BLOCK_SIZE;
+	Dprintf("%s [%u]\n", __FUNCTION__, inode_offset);
 	if(inode_offset >= inode->i_blocks)
 		/* asked for an offset past the last block */
 		return NULL;
@@ -600,7 +612,7 @@ static struct blkptr * waffle_get_data_blkptr(struct waffle_info * info, const s
 		return NULL;
 	pointer = &((uint32_t *) blkptr_data(dindirect_blkptr))[(inode_offset - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS];
 	indirect_blkptr = waffle_follow_pointer(info, dindirect_blkptr, pointer);
-	waffle_put_blkptr(info, &indirect_blkptr);
+	waffle_put_blkptr(info, &dindirect_blkptr);
 	if(!indirect_blkptr)
 		return NULL;
 	pointer = &((uint32_t *) blkptr_data(indirect_blkptr))[(inode_offset - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS];
@@ -644,7 +656,7 @@ static int waffle_change_allocation(struct waffle_info * info, uint32_t number, 
 
 static int waffle_clone_block(struct waffle_info * info, struct blkptr * blkptr)
 {
-	Dprintf("%s\n", __FUNCTION__);
+	Dprintf("%s %u\n", __FUNCTION__, blkptr->number);
 	uint32_t number;
 	bdesc_t * copy;
 	patch_t * patch = NULL;
@@ -1265,8 +1277,9 @@ static uint32_t waffle_get_file_numblocks(LFS_t * object, fdesc_t * file)
 static uint32_t waffle_get_file_block(LFS_t * object, fdesc_t * file, uint32_t offset)
 {
 	Dprintf("%s %p, %u\n", __FUNCTION__, file, offset);
+	struct waffle_info * info = (struct waffle_info *) object;
 	struct waffle_fdesc * fdesc = (struct waffle_fdesc *) file;
-	return waffle_get_inode_block((struct waffle_info *) object, f_ip(fdesc), offset);
+	return waffle_get_inode_block(info, f_ip(fdesc), offset);
 }
 
 static int waffle_get_dirent(LFS_t * object, fdesc_t * file, struct dirent * entry, uint16_t size, uint32_t * basep)
@@ -1325,6 +1338,8 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 	struct blkptr * dindirect;
 	uint32_t * pointer;
 	int r = 0;
+	if(block <= WAFFLE_SUPER_BLOCK || block >= info->super->s_blocks)
+		return -EINVAL;
 	if(init.i_blocks < WAFFLE_DIRECT_BLOCKS)
 	{
 		init.i_direct[init.i_blocks++] = block;
@@ -1364,6 +1379,8 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 				waffle_put_blkptr(info, &indirect);
 				goto fail_undo_1;
 			}
+			/* the indirect block number is now different */
+			init = *f_ip(fd);
 		}
 		r = waffle_set_pointer(info, indirect, init.i_blocks - WAFFLE_DIRECT_BLOCKS, block);
 		waffle_put_blkptr(info, &indirect);
@@ -1418,6 +1435,8 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 				waffle_mark_deallocated(info, number);
 				goto fail_undo_2;
 			}
+			/* the double indirect block number is now different */
+			init = *f_ip(fd);
 		}
 		r = waffle_set_pointer(info, dindirect, (init.i_blocks - WAFFLE_INDIRECT_BLOCKS) / WAFFLE_BLOCK_POINTERS, number);
 		if(r < 0)
@@ -1435,6 +1454,8 @@ static int waffle_append_file_block(LFS_t * object, fdesc_t * file, uint32_t blo
 		r = waffle_clone_block(info, indirect);
 		if(r < 0)
 			goto fail_undo_4;
+		/* nothing should have changed on the inode */
+		assert(!memcmp(&init, f_ip(fd), sizeof(init)));
 	}
 	r = waffle_set_pointer(info, indirect, (init.i_blocks - WAFFLE_INDIRECT_BLOCKS) % WAFFLE_BLOCK_POINTERS, block);
 	if(r < 0)
@@ -2032,6 +2053,7 @@ static void waffle_callback(void * arg)
 	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "checkpoint");
 	/* weak retain the new checkpoint so we know when the old one is no longer on disk */
 	patch_weak_retain(patch, &old_snapshot->overwrite, NULL, NULL);
+	info->last_checkpoint = old_snapshot;
 	info->old_snapshots = old_snapshot;
 	info->checkpoint = info->active;
 	/* increase the reference count of the bitmap cache we copied */
@@ -2171,6 +2193,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	bdesc_retain(info->super_cache);
 	info->super = (struct waffle_super *) bdesc_data(info->super_cache);
 	info->s_active = info->super->s_checkpoint;
+	info->last_checkpoint = NULL;
 	info->old_snapshots = NULL;
 	info->cloned_since_checkpoint = 0;
 	/* TODO: something better than these might be nice */
@@ -2186,7 +2209,7 @@ LFS_t * waffle_lfs(BD_t * block_device)
 	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, info->checkpoint_changes, "checkpoint changes");
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, info->checkpoint_changes, PATCH_SET_EMPTY);
 	info->checkpoint_changes->flags |= PATCH_SET_EMPTY;
-	if(sched_register(waffle_callback, info, 10 * HZ) < 0)
+	if(sched_register(waffle_callback, info, CHECKPOINT_INTERVAL) < 0)
 		goto fail_tail;
 	
 	/* FIXME: count the free blocks */
@@ -2217,6 +2240,63 @@ LFS_t * waffle_lfs(BD_t * block_device)
   fail_info:
 	free(info);
 	return NULL;
+}
+
+/* }}} */
+
+/* user snapshots {{{ */
+
+int waffle_take_snapshot(LFS_t * object, int number)
+{
+	struct waffle_info * info = (struct waffle_info *) object;
+	struct waffle_old_snapshot * old_snapshot;
+	patch_t * patch = NULL;
+	int r;
+	if(OBJMAGIC(object) != WAFFLE_FS_MAGIC)
+		return -EINVAL;
+	if(number < 0 || number >= WAFFLE_SNAPSHOT_COUNT)
+		return -EINVAL;
+	/* make a checkpoint if necessary */
+	if(info->cloned_since_checkpoint)
+	{
+		waffle_callback(object);
+		if(info->cloned_since_checkpoint)
+			return -EBUSY;
+	}
+	old_snapshot = waffle_snapshot_pool_alloc();
+	if(!old_snapshot)
+	{
+		fprintf(stderr, "%s(): warning: failed to allocate snapshot!\n", __FUNCTION__);
+		return -ENOMEM;
+	}
+	/* save the old snapshot */
+	WEAK_INIT(old_snapshot->overwrite);
+	old_snapshot->bitmap = info->snapshot[number];
+	old_snapshot->snapshot = info->super->s_snapshot[number];
+	old_snapshot->next = info->old_snapshots;
+	
+	if(info->last_checkpoint)
+		patch = WEAK(info->last_checkpoint->overwrite);
+	r = patch_create_byte_atomic(info->super_cache, info->ubd, offsetof(struct waffle_super, s_snapshot[number]), sizeof(struct waffle_snapshot), &info->super->s_checkpoint, &patch);
+	if(r < 0)
+	{
+		waffle_snapshot_pool_free(old_snapshot);
+		fprintf(stderr, "%s(): warning: failed to create checkpoint!\n", __FUNCTION__);
+		return r;
+	}
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, patch, "snapshot");
+	/* weak retain the new snapshot so we know when the old one is no longer on disk */
+	patch_weak_retain(patch, &old_snapshot->overwrite, NULL, NULL);
+	info->old_snapshots = old_snapshot;
+	info->snapshot[number] = info->checkpoint;
+	/* increase the reference count of the bitmap cache we copied */
+	if(info->snapshot[number].bb_cache)
+		bdesc_retain(info->snapshot[number].bb_cache);
+	
+	r = CALL(info->ubd, write_block, info->super_cache, WAFFLE_SUPER_BLOCK);
+	if(r < 0)
+		fprintf(stderr, "%s(): warning: failed to write superblock!\n", __FUNCTION__);
+	return 0;
 }
 
 /* }}} */

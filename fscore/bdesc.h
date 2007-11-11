@@ -70,7 +70,7 @@ struct bdesc {
 
 #define OVERLAP1SHIFT	5
 #define NOVERLAP1	32
-	patch_t *overlap1[1 + NOVERLAP1];
+	patch_t * overlap1[1 + NOVERLAP1];
 	
 	hash_map_t * bit_patches;
 	
@@ -84,19 +84,19 @@ struct bdesc {
 	uint32_t block_after_pass;
 #endif
 	struct {
-		struct bdesc **pprev;
-		struct bdesc *next;
+		struct bdesc ** pprev;
+		struct bdesc * next;
 	} block_hash;
 	struct {
-		struct bdesc *prev;
-		struct bdesc *next;
+		struct bdesc * prev;
+		struct bdesc * next;
 	} lru_all, lru_dirty;
 
 	// DISK/BLOCKMAN INFORMATION
 	uint32_t disk_number;
 	struct {
-		struct bdesc **pprev;
-		struct bdesc *next;
+		struct bdesc ** pprev;
+		struct bdesc * next;
 	} disk_hash;
 
 	// REFCOUNT INFORMATION
@@ -104,7 +104,7 @@ struct bdesc {
 	uint32_t ar_count;
 	bdesc_t * ar_next;
 
-	bdesc_t *ddesc; /* hee hee */
+	bdesc_t * ddesc; /* hee hee */
 };
 
 int bdesc_init(void);
@@ -124,8 +124,8 @@ static inline void bdesc_ensure_linked_page(bdesc_t * bdesc, page_t * page);
 static inline bdesc_t * bdesc_retain(bdesc_t * bdesc);
 
 /* decrease the bdesc reference count and free it if it reaches 0 */
-static inline void bdesc_release(bdesc_t **bdp) __attribute__((always_inline));
-void __bdesc_release(bdesc_t *bdesc);
+static inline void bdesc_release(bdesc_t ** bdp) __attribute__((always_inline));
+void __bdesc_release(bdesc_t * bdesc);
 
 /* schedule the bdesc to be released at the end of the current run loop */
 bdesc_t * bdesc_autorelease(bdesc_t * bdesc);
@@ -171,7 +171,7 @@ static inline bdesc_t * bdesc_retain(bdesc_t * bdesc)
 	return bdesc;
 }
 
-static inline void bdesc_release(bdesc_t **bdp)
+static inline void bdesc_release(bdesc_t ** bdp)
 {
 	assert((*bdp)->ref_count > (*bdp)->ar_count);
 	(*bdp)->ref_count--;

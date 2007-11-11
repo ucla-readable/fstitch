@@ -71,6 +71,7 @@ static uint32_t wb_push_block(struct cache_info * info, bdesc_t * block, uint32_
 	
 	info->blocks[index].block = block;
 	block->cache_number = number;
+	FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_BDESC_NUMBER, block, number, 1);
 	
 	/* not a free slot anymore */
 	info->blocks[0].free_index = info->blocks[index].next_index;
