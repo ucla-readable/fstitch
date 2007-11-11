@@ -24,7 +24,6 @@
 #endif
 
 #define ROUND_ROBIN_ALLOC 1
-#define EXT2_NEW_ALLOC 1
 
 #if EXT2_LFS_DEBUG
 #define Dprintf(x...) printf(x)
@@ -123,11 +122,9 @@ struct ext2_info {
 	 * data, directory data, and [d]indirect pointers */
 	uint32_t last_fblock, last_dblock, last_iblock;
 #endif
-#if EXT2_NEW_ALLOC
 	//Keep track of the total number of directories in the system
 	uint32_t ndirs;
 	uint8_t * debts;
-#endif
 #if DELETE_MERGE_STATS
 	struct {
 		unsigned merged, uncommitted, total;
@@ -3392,9 +3389,7 @@ static int ext2_destroy(LFS_t * lfs)
 	free(info->gdescs);
 	free((EXT2_Super_t *) info->super);
 	free((EXT2_group_desc_t *) info->groups);
-#if EXT2_NEW_ALLOC
 	free((int8_t *)info->debts);
-#endif
 	memset(info, 0, sizeof(*info));
 	free(info);
 	
@@ -3524,13 +3519,11 @@ static int ext2_super_report(LFS_t * lfs, uint32_t group, int32_t blocks, int32_
 		gd->bg_free_blocks_count += blocks;
 		gd->bg_free_inodes_count += inodes;
 		gd->bg_used_dirs_count += dirs;
-#if EXT2_NEW_ALLOC
 		info->ndirs += dirs;
 		if(dirs == 1 && info->debts[group] < 255)
 				info->debts[group]++;
 		if(inodes == 1 && info->debts[group])
 				info->debts[group]--;
-#endif
 	
 		head = info->write_head ? *info->write_head : NULL;
 	
@@ -3616,9 +3609,7 @@ static int ext2_load_super(LFS_t * lfs)
 	
 	info->gdescs = malloc(ngroupblocks * sizeof(bdesc_t *));
 	int nbytes = 0;
-#if EXT2_NEW_ALLOC
 	info->ndirs = 0;
-#endif
 	for(i = 0; i < ngroupblocks; i++)
 	{
 		info->gdescs[i] = CALL(info->ubd, read_block, GDESC_BLOCKNO(i), 1, NULL);
@@ -3636,13 +3627,11 @@ static int ext2_load_super(LFS_t * lfs)
 		bdesc_retain(info->gdescs[i]);
 	}
 	info->ngroupblocks = ngroupblocks;
-#if EXT2_NEW_ALLOC
 	for(i = 0; i < ngroups; i++)
 		info->ndirs += info->groups[i].bg_used_dirs_count;
 	info->debts = calloc(ngroups, sizeof(int8_t));
 	if(!info->debts)
 		goto wb_fail2;
-#endif
 	
 	return 1;
 	
