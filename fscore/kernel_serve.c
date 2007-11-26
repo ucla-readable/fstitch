@@ -1383,6 +1383,8 @@ static ssize_t serve_generic_file_buffered_write(struct file * filp,
 		unlock_page(page);
 		mark_page_accessed(page);
 		page_cache_release(page);
+		if (status < 0)
+			break;
 		balance_dirty_pages_ratelimited(mapping);
 		cond_resched();
 	} while(count);
