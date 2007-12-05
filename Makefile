@@ -1,5 +1,8 @@
 # Linux kernel featherstitch Makefile
 
+# [ X == Y ] is a bash-ism
+SHELL = /bin/bash
+
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/kernel
 UTILDIR := $(BASE_OBJDIR)/util
