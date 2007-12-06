@@ -1,8 +1,5 @@
 # Linux kernel featherstitch Makefile
 
-# [ X == Y ] is a bash-ism
-SHELL = /bin/bash
-
 BASE_OBJDIR := obj
 OBJDIR := $(BASE_OBJDIR)/kernel
 UTILDIR := $(BASE_OBJDIR)/util
@@ -56,7 +53,7 @@ andrew: bench/ab-leiz.tar.gz
 	sed -i "s,/home/leiz,`pwd`/obj," obj/ab/original/Makefile
 
 kfstitchd.ko: always
-	@[ ! -f .kernel_version ] || [ "`cat .kernel_version`" == "$(KERNELRELEASE)" ] || $(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
+	@[ ! -f .kernel_version ] || [ "`cat .kernel_version`" = "$(KERNELRELEASE)" ] || $(MAKE) -C $(KERNELPATH) M=$(shell pwd) clean
 	@echo "$(KERNELRELEASE)" > .kernel_version
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules
 	@[ ! -f .user ] || $(MAKE) -f Makefile.user
