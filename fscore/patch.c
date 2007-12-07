@@ -2077,7 +2077,7 @@ static int patch_create_byte_merge_overlap(patch_t ** tail, patch_t ** new, patc
 #else
 
 #if __GNUC__ == 4 && (__GNUC_MINOR__ == 0 || __GNUC_MINOR__ == 1)
-/* gcc 4.0, and 4.1 for the Linux kernel, detects this inlining opportunity but
+/* gcc 4.0, and 4.1 for the Linux kernel, detect this inlining opportunity but
  * can't handle it; older versions ignore it and newer versions support it */
 #define recursive_inline
 #else
