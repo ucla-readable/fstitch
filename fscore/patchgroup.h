@@ -119,4 +119,8 @@ patchgroup_id_t patchgroup_linear(patchgroup_id_t previous);
 
 #endif /* FSTITCHD */
 
+int txn_start(const char * path);
+int txn_finish(void);
+int txn_abort(void);
+
 #endif /* __FSTITCH_FSCORE_PATCHGROUP_H */

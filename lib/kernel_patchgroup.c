@@ -174,3 +174,22 @@ int patchgroup_label(patchgroup_id_t patchgroup, const char * label)
 	Dprintf("%s%s(%d, \"%s\")\n", PREFIX, __FUNCTION__, patchgroup, label);
 	return pass_request(PATCHGROUP_IOCTL_LABEL, patchgroup, -1, -1, label);
 }
+
+
+int txn_start(const char * path)
+{
+	Dprintf("%s%s(\"%s\")\n", PREFIX, __FUNCTION__, path);
+	return pass_request(PATCHGROUP_IOCTL_TXN_START, -1, -1, -1, path);
+}
+
+int txn_finish(void)
+{
+	Dprintf("%s%s()\n", PREFIX, __FUNCTION__);
+	return pass_request(PATCHGROUP_IOCTL_TXN_FINISH, -1, -1, -1, NULL);
+}
+
+int txn_abort(void)
+{
+	Dprintf("%s%s()\n", PREFIX, __FUNCTION__);
+	return pass_request(PATCHGROUP_IOCTL_TXN_ABORT, -1, -1, -1, NULL);
+}

@@ -83,6 +83,10 @@ typedef struct mount_desc mount_desc_t;
 
 static vector_t * mounts = NULL;
 
+pid_t txn_owner = 0;
+struct inode * txn_inode = NULL;
+DECLARE_WAIT_QUEUE_HEAD(txn_waitq);
+
 static mount_desc_t * mount_desc_create(const char * path, CFS_t * cfs)
 {
 	mount_desc_t * m = malloc(sizeof(*m));
@@ -414,6 +418,7 @@ static void read_inode_withlock(struct inode * inode)
 
 static void serve_read_inode(struct inode * inode)
 {
+	// TODO: block on txn? (need dentry)
 	Dprintf("%s(ino = %lu)\n", __FUNCTION__, inode->i_ino);
 	fstitchd_enter();
 	read_inode_withlock(inode);
@@ -599,11 +604,70 @@ static void serve_kill_sb(struct super_block * sb)
 	kill_anon_super(sb);
 }
 
+static bool inode_contains(const struct inode * inode1, const struct dentry * dentry2)
+{
+	while (1)
+	{
+		if (inode1 == dentry2->d_inode)
+			return 1;
+		if (dentry2 == dentry2->d_parent)
+			return 0; // reached the root
+		dentry2 = dentry2->d_parent;
+	}
+}
+
+static void block_on_txn(struct dentry * dentry)
+{
+	DEFINE_WAIT(wait);
+	bool waited = 0;
+
+	assert(fstitchd_have_lock());
+
+	if (current->pid == txn_owner)
+		return;
+
+	while (txn_inode && inode_contains(txn_inode, dentry))
+	{
+		waited = 1;
+		prepare_to_wait(&txn_waitq, &wait, TASK_INTERRUPTIBLE); // TODO: int?
+		fstitchd_leave(0);
+		schedule();
+		fstitchd_enter();
+	}
+	if (waited)
+		finish_wait(&txn_waitq, &wait);
+}
+
+static void block_on_txn2(struct dentry * dentry1, struct dentry * dentry2)
+{
+	DEFINE_WAIT(wait);
+	bool waited = 0;
+
+	assert(fstitchd_have_lock());
+
+	if (current->pid == txn_owner)
+		return;
+
+	while (txn_inode && (inode_contains(txn_inode, dentry1) || inode_contains(txn_inode, dentry2)))
+	{
+		waited = 1;
+		prepare_to_wait(&txn_waitq, &wait, TASK_INTERRUPTIBLE); // TODO: int?
+		fstitchd_leave(0);
+		schedule();
+		fstitchd_enter();
+	}
+	if (waited)
+		finish_wait(&txn_waitq, &wait);
+}
+
 static int serve_open(struct inode * inode, struct file * filp)
 {
 	fdesc_t * fdesc;
 	int r;
 	Dprintf("%s(\"%s\")\n", __FUNCTION__, filp->f_dentry->d_name.name);
+
+	fstitchd_enter();
+	block_on_txn(filp->f_dentry);
 
 	/* don't cache above featherstitch - we have our own caches */
 	filp->f_mode |= O_SYNC;
@@ -612,7 +676,6 @@ static int serve_open(struct inode * inode, struct file * filp)
 	if (r < 0)
 		return r;
 
-	fstitchd_enter();
 	r = CALL(dentry2cfs(filp->f_dentry), open, filp->f_dentry->d_inode->i_ino, 0, &fdesc);
 	fdesc->common->parent = filp->f_dentry->d_parent->d_inode->i_ino;
 	if (r < 0)
@@ -645,6 +708,7 @@ static int serve_release(struct inode * inode, struct file * filp)
 	int r;
 
 	fstitchd_enter();
+	block_on_txn(filp->f_dentry);
 
 	fstitchd_fdesc = file2fdesc(filp);
 	r = serve_filemap_write_and_wait(inode->i_mapping);
@@ -668,7 +732,10 @@ static struct dentry * serve_dir_lookup(struct inode * dir, struct dentry * dent
 	Dprintf("%s(dentry = \"%s\") (pid = %d)\n", __FUNCTION__, dentry->d_name.name, current->pid);
 
 	fstitchd_enter();
+	block_on_txn(dentry);
+
 	assert(dentry2cfs(dentry));
+
 	r = CALL(dentry2cfs(dentry), lookup, dir->i_ino, dentry->d_name.name, &cfs_ino);
 	if (r == -ENOENT)
 		cfs_ino = 0;
@@ -717,6 +784,8 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	int r;
 
 	fstitchd_enter();
+	block_on_txn(dentry);
+
 	cfs = dentry2cfs(dentry);
 
 #if ATTR_FILE != 0
@@ -838,6 +907,9 @@ static int serve_link(struct dentry * src_dentry, struct inode * parent, struct 
 	int r;
 
 	fstitchd_enter();
+	// TODO: handle symbolic and hard links (ie changing a file with dirents both under and not under txn_inode)
+	block_on_txn2(src_dentry, target_dentry);
+
 	assert(dentry2cfs(src_dentry) == dentry2cfs(target_dentry));
 	r = CALL(dentry2cfs(src_dentry), link, src_dentry->d_inode->i_ino, parent->i_ino, target_dentry->d_name.name);
 	if (r >= 0)
@@ -859,6 +931,8 @@ static int serve_unlink(struct inode * dir, struct dentry * dentry)
 	int r;
 
 	fstitchd_enter();
+	block_on_txn(dentry);
+
 	r = CALL(dentry2cfs(dentry), unlink, dir->i_ino, dentry->d_name.name);
 	if (r >= 0)
 	{
@@ -915,6 +989,7 @@ static int serve_create(struct inode * dir, struct dentry * dentry, int mode, st
 	int r;
 
 	fstitchd_enter();
+	block_on_txn(dentry);
 	r = create_withlock(dir, dentry, mode, &kernelmd);
 	fstitchd_leave(1);
 
@@ -931,6 +1006,7 @@ static int serve_mknod(struct inode * dir, struct dentry * dentry, int mode, dev
 		return -EPERM;
 
 	fstitchd_enter();
+	block_on_txn(dentry);
 	r = create_withlock(dir, dentry, mode, &kernelmd);
 	fstitchd_leave(1);
 	return r;
@@ -944,6 +1020,7 @@ static int serve_symlink(struct inode * dir, struct dentry * dentry, const char 
 	int r;
 
 	fstitchd_enter();
+	block_on_txn(dentry);
 
 	if (!feature_supported(dentry2cfs(dentry), FSTITCH_FEATURE_SYMLINK))
 	{
@@ -968,6 +1045,7 @@ static int serve_mkdir(struct inode * dir, struct dentry * dentry, int mode)
 	int r;
 
 	fstitchd_enter();
+	block_on_txn(dentry);
 
 	r = CALL(dentry2cfs(dentry), mkdir, dir->i_ino, dentry->d_name.name, &initialmd, &cfs_ino);
 	if (r < 0)
@@ -998,6 +1076,7 @@ static int serve_rmdir(struct inode * dir, struct dentry * dentry)
 	int r;
 
 	fstitchd_enter();
+	block_on_txn(dentry);
 	r = CALL(dentry2cfs(dentry), rmdir, dir->i_ino, dentry->d_name.name);
 	if (r >= 0)
 		dir->i_nlink--;
@@ -1013,6 +1092,7 @@ static int serve_rename(struct inode * old_dir, struct dentry * old_dentry, stru
 	int r;
 
 	fstitchd_enter();
+	block_on_txn2(old_dentry, new_dentry);
 	cfs = dentry2cfs(old_dentry);
 	if (cfs != dentry2cfs(new_dentry))
 	{
@@ -1043,6 +1123,7 @@ static int serve_dir_readdir(struct file * filp, void * k_dirent, filldir_t fill
 	int r;
 
 	fstitchd_enter();
+	block_on_txn(filp->f_dentry);
 	while (1)
 	{
 		uint32_t cfs_fpos = filp->f_pos;
@@ -1070,6 +1151,7 @@ static int serve_fsync(struct file * filp, struct dentry * dentry, int datasync)
 	int r;
 
 	fstitchd_enter();
+	block_on_txn(dentry);
 	r = fstitch_sync();
 	fstitchd_leave(1);
 	return r;
@@ -1115,6 +1197,7 @@ static int serve_readlink(struct dentry * dentry, char __user * buffer, int bufl
 		buflen = sizeof(link_name);
 
 	fstitchd_enter();
+	block_on_txn(dentry);
 
 	link_len = read_link(dentry, link_name, buflen);
 	if (link_len < 0)
@@ -1158,6 +1241,7 @@ serve_follow_link(struct dentry * dentry, struct nameidata * nd)
 	char * nd_link_name;
 
 	fstitchd_enter();
+	block_on_txn(dentry);
 
 	link_len = read_link(dentry, link_name, sizeof(link_name));
 	if (link_len < 0)
@@ -1214,6 +1298,7 @@ static int serve_readpage(struct file * filp, struct page * page)
 	Dprintf("%s(filp = \"%s\", offset = %lld)\n", __FUNCTION__, filp->f_dentry->d_name.name, offset);
 
 	fstitchd_enter();
+	block_on_txn(filp->f_dentry);
 	assert(!PageHighMem(page));
 	buffer = lowmem_page_address(page);
 	cfs = dentry2cfs(filp->f_dentry);
@@ -1253,6 +1338,7 @@ static ssize_t serve_write_page(struct file * filp, loff_t pos, struct page * pa
 	Dprintf("%s(file = \"%s\", pos = %lu, len = %u)\n", __FUNCTION__, filp->f_dentry->d_name.name, (unsigned long) pos, len);
 
 	fstitchd_enter();
+	block_on_txn(filp->f_dentry);
 
 	if(!access_ok(VERIFY_READ, buf, len))
 		return -EFAULT;

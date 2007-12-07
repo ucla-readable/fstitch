@@ -29,6 +29,7 @@ static int kernel_patchgroup_ioctl(struct inode * inode, struct file * filp, uns
 	patchgroup_t * patchgroup_a = NULL;
 	patchgroup_t * patchgroup_b = NULL;
 	char str[STR_LEN_MAX];
+	char * tmp;
 	int r;
 
 	if (copy_from_user((void *) &cmd_args, (void __user *) arg, sizeof(cmd_args)))
@@ -39,7 +40,7 @@ static int kernel_patchgroup_ioctl(struct inode * inode, struct file * filp, uns
 		patchgroup_a = patchgroup_lookup(cmd_args.patchgroup_a);
 	if (cmd_args.patchgroup_b >= 0)
 		patchgroup_b = patchgroup_lookup(cmd_args.patchgroup_b);
-	if (cmd_args.str)
+	if (cmd_args.str && cmd != PATCHGROUP_IOCTL_TXN_START)
 	{
 		long len = strnlen_user(cmd_args.str, STR_LEN_MAX);
 		if (len < 1 || STR_LEN_MAX < len)
@@ -73,6 +74,21 @@ static int kernel_patchgroup_ioctl(struct inode * inode, struct file * filp, uns
 			break;
 		case PATCHGROUP_IOCTL_LABEL:
 			r = patchgroup_label(patchgroup_a, str);
+			break;
+		case PATCHGROUP_IOCTL_TXN_START:
+			tmp = getname(cmd_args.str);
+			r = PTR_ERR(tmp);
+			if (!IS_ERR(tmp))
+			{
+				r = txn_start(tmp);
+				putname(tmp);
+			}
+			break;
+		case PATCHGROUP_IOCTL_TXN_FINISH:
+			r = txn_finish();
+			break;
+		case PATCHGROUP_IOCTL_TXN_ABORT:
+			r = txn_abort();
 			break;
 		default:
 			r = -ENOTTY;
