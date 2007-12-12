@@ -1217,22 +1217,24 @@ static fdesc_t * ext2_lookup_inode(LFS_t * object, inode_t ino)
 static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, inode_t * ino)
 {
 	Dprintf("EXT2DEBUG: ext2_lookup_name %s\n", name);
-	ext2_fdesc_t * fd;
-	ext2_fdesc_t * parent_file;
+	ext2_fdesc_t * parent_fd;
+	ext2_fdesc_t * fd = NULL;
 	ext2_mdir_t * mdir;
 	ext2_mdirent_t * mdirent;
 	int r = 0;
 	
 	// TODO do some sanity checks on name
 	
-	fd = (ext2_fdesc_t *) ext2_lookup_inode(object, parent);
-	if(!fd)
+	parent_fd = (ext2_fdesc_t *) ext2_lookup_inode(object, parent);
+	if(!parent_fd)
 		return -ENOENT;
-	if(fd->f_type != TYPE_DIR)
+	if(parent_fd->f_type != TYPE_DIR)
+	{
+		ext2_free_fdesc(object, (fdesc_t *) parent_fd);
 		return -ENOTDIR;
-	parent_file = fd;
+	}
 	
-	r = ext2_mdir_get(object, parent_file, &mdir);
+	r = ext2_mdir_get(object, parent_fd, &mdir);
 	if(r < 0)
 		goto exit;
 	mdirent = ext2_mdirent_get(mdir, name);
@@ -1246,9 +1248,8 @@ static int ext2_lookup_name(LFS_t * object, inode_t parent, const char * name, i
 		r = -ENOENT;
 	
   exit:
-	if(fd != parent_file)
-		ext2_free_fdesc(object, (fdesc_t *) fd);
-	ext2_free_fdesc(object, (fdesc_t *) parent_file);
+	ext2_free_fdesc(object, (fdesc_t *) fd);
+	ext2_free_fdesc(object, (fdesc_t *) parent_fd);
 	if(r < 0)
 		return r;
 	return 0;
