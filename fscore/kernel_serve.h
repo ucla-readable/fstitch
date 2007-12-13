@@ -63,15 +63,19 @@ static inline void fstitchd_enter(void)
 #if CONTENTION_WARNING
 	int tries = 0;
 #endif
-	assert(!fstitchd_have_lock());
+	if(fstitchd_have_lock())
+	{
+		fstitchd_global_lock.locked++;
+		return;
+	}
 
 	for(;;)
 	{
 		spin_lock(&fstitchd_global_lock.lock);
 		if(!fstitchd_global_lock.locked)
 		{
-			fstitchd_global_lock.locked = 1;
 			fstitchd_global_lock.process = current->pid;
+			fstitchd_global_lock.locked = 1;
 			spin_unlock(&fstitchd_global_lock.lock);
 			patchgroup_scope_set_current(process_patchgroup_scope(current));
 #if CONTENTION_WARNING
@@ -114,6 +118,8 @@ static inline void fstitchd_leave(int cleanup)
 {
 	assert(fstitchd_global_lock.locked);
 	assert(fstitchd_global_lock.process == current->pid);
+	if(--fstitchd_global_lock.locked)
+		return;
 	while(fstitchd_global_lock.callbacks)
 	{
 		struct callback_list * first = fstitchd_global_lock.callbacks;
@@ -125,7 +131,7 @@ static inline void fstitchd_leave(int cleanup)
 	if(cleanup)
 		sched_run_cleanup();
 	fstitchd_global_lock.process = 0;
-	fstitchd_global_lock.locked = 0;
+	assert(!fstitchd_global_lock.locked);
 }
 
 #endif // !__FSTITCH_FSCORE_KERNEL_SERVE_H
