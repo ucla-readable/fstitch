@@ -49,10 +49,6 @@ struct stealth_lock {
 
 extern struct stealth_lock fstitchd_global_lock;
 
-extern pid_t txn_owner;
-extern struct inode * txn_inode;
-extern wait_queue_head_t txn_waitq;
-
 static inline void fstitchd_enter(void) __attribute__((always_inline));
 static inline int fstitchd_have_lock(void) __attribute__((always_inline));
 static inline void fstitchd_leave(int cleanup) __attribute__((always_inline));
@@ -62,6 +58,7 @@ static inline int fstitchd_have_lock(void)
 	return fstitchd_global_lock.locked && fstitchd_global_lock.process == current->pid;
 }
 
+/* FIXME: can data become invalid while waiting for the fstitchd lock? */
 static inline void fstitchd_enter(void)
 {
 #if CONTENTION_WARNING

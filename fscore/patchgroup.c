@@ -8,9 +8,6 @@
 #include <fscore/debug.h>
 #include <fscore/sync.h>
 #include <fscore/patchgroup.h>
-#ifdef __KERNEL__
-# include <fscore/kernel_serve.h>
-#endif
 
 #include <modules/journal_bd.h>
 
@@ -713,54 +710,3 @@ int patchgroup_label(patchgroup_t * patchgroup, const char * label)
 		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, WEAK(patchgroup->tail), "og tail: %s", label);
 	return 0;
 }
-
-#ifdef __KERNEL__
-int txn_start(const char * path)
-{
-	struct inode * inode;
-	struct nameidata nd;
-	int r;
-
-	fstitchd_leave(0);
-	r = path_lookup(path, 0, &nd);
-	if (r < 0)
-		return r;
-	inode = igrab(nd.dentry->d_inode);
-	path_release(&nd);
-	fstitchd_enter();
-
-	if (txn_inode)
-	{
-		iput(inode);
-		return -EBUSY;
-	}
-
-	txn_owner = current->pid; // FIXME: pid can exit before txn_finish()
-	txn_inode = inode;
-
-	// TODO: make changes within the txn
-
-	return 0;
-}
-
-int txn_finish(void)
-{
-	if (!txn_inode)
-		return -EINVAL;
-	//if (txn_owner != current->pid)
-	//	return -EPERM;
-
-	// TODO: commit txn changes
-
-	iput(txn_inode);
-	txn_inode = NULL;
-	txn_owner = 0;
-	wake_up_all(&txn_waitq);
-	return 0;
-}
-
-int txn_abort(void)
-{
-	return -ENOTTY;
-}
-#endif
