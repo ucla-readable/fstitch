@@ -1,0 +1,31 @@
+--- linux-2.6.20.1/arch/i386/kernel/sys_i386.c	2007-02-19 22:34:32.000000000 -0800
++++ linux-2.6.20.1-syscall/arch/i386/kernel/sys_i386.c	2008-01-08 15:44:30.000000000 -0800
+@@ -19,6 +19,7 @@
+ #include <linux/mman.h>
+ #include <linux/file.h>
+ #include <linux/utsname.h>
++#include <linux/module.h>
+ 
+ #include <asm/uaccess.h>
+ #include <asm/unistd.h>
+@@ -263,3 +264,11 @@
+ 	: "0" (__NR_execve),"ri" (filename),"c" (argv), "d" (envp) : "memory");
+ 	return __res;
+ }
++
++/*
++ * Export the address of sys_call_table to modules.
++ * include/asm-i386/unistd.h contains syscall indices.
++ * arch/i386/kernel/syscall_table.S contains sys_call_table.
++ */
++extern long sys_call_table;
++EXPORT_SYMBOL(sys_call_table);
+--- /dev/null	2007-05-05 08:18:00.000000000 -0700
++++ linux-2.6.20.1-syscall/include/asm-i386/sys_call_table.h	2008-01-08 15:44:55.000000000 -0800
+@@ -0,0 +1,6 @@
++#ifndef SYS_CALL_TABLE_H
++#define SYS_CALL_TABLE_H 1
++
++extern long sys_call_table;
++
++#endif
