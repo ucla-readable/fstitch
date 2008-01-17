@@ -36,6 +36,7 @@ KFSTITCHD_FSTITCH_OBJS := \
               fstitchd.o \
               kernel_patchgroup_ops.o \
               kernel_patchgroup_scopes.o \
+              kernel_serve_syscalls.o \
               kernel_serve.o \
               modman.o \
               patchgroup.o \

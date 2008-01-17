@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <asm/current.h>
 #include <linux/sched.h>
+#include <linux/wait.h>
 
 #include <fscore/cfs.h>
 #include <fscore/fstitchd.h>
@@ -17,7 +18,11 @@
 #include <fscore/patchgroup.h>
 #include <fscore/kernel_patchgroup_scopes.h>
 
-#define CONTENTION_WARNING 0
+#define CONTENTION_WARNING 1
+
+#define ETXN 132 /* max used errno + 1 */
+
+extern wait_queue_head_t txn_waitq;
 
 int kernel_serve_add_mount(const char * path, CFS_t * cfs);
 
