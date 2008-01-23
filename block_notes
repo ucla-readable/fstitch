@@ -1,0 +1,35 @@
+Blocking linux file system system calls (i386)
+
+want to block everyone except process P when accessing the path A/*
+syscalls get 'const char __user *' args. vfs/file systems get 'struct inode *, struct dirent *' args.
+	want to use vfs structures to do blocking accounting (avoid parsing paths twice and keeping our own fd tables)
+	file systems are also a modular part of linux
+
+but, can't block inside the file system: vfs holds locks (eg inode). deadlock if we do! (eg someone blocks, then unblocker tries to access and blocks on inode)
+so take a split approach: block before linux grabs locks: inside the system call functions
+	syscall adds self to waitq, fs functions return -EBLOCK, syscall then blocks itself
+		fs-independent approach would return (and catch?) -EBLOCK from vfs code
+
+watch out to not grab and hold locks while calling into vfs: you might block! (eg disk io or blocking read from an empty pipe/socket)
+
+but let's not modify the system calls themselves; we'll shadow them
+	get called, call shadowed fn, block and re-call if -EBLOCK, else return
+shadowing is a bit architecture-specific
+long sys_call_table; EXPORT_SYMBOL(); (&sct)[i]
+~80 file system system calls, but shadower body is mechanical
+approach doesn't work for all syscalls: sys_execve(struct pt_regs regs);
+struct pt_regs { long ebx, ecx, edx, esi, edi, ebp, eax; int xds, xes, xgs; long orig_eax, eip; int xcs; long eflags, esp; int xss; };
+do_execve(struct pt_regs *) modifies registers (set most to 0, set eip, esp, and set segments)
+solutions:
+	reimplement sys_exeve(). problem: do_execve() isn't exported.
+	maybe, re-interrupt.
+
+shadowing sys_call_table entries is safe because entries are written atomically
+	just delay blocking until all entries are shadowed
+problem: unshadow sys_call_table entries
+	when is a given entry not in use?
+		accounting in the shadowers is insufficient on multiproc
+		singleproc, nonprempt: whenever we weren't called by the entry
+		multiproc solns:
+			don't unload
+			permanent read-write lock wrapper
