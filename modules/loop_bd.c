@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -77,7 +77,7 @@ static int loop_write_block(BD_t * bd, bdesc_t * block, uint32_t loop_number)
 	if(r < 0)
 		return r;
 
-	/* masquerade as an patchgroup for things like the journal */
+	/* masquerade as a patchgroup for things like the journal */
 	patchgroup_masquerade();
 	r = CALL(info->lfs, write_block, block, lfs_number, &head);
 	patchgroup_demasquerade();

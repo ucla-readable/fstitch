@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -593,7 +593,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 		/* if we already have the block in the journal, it must have metadata */
 		if(number)
 			metadata = 1;
-		/* if there is an patchgroup engaged, everything we do should be
+		/* if there is a patchgroup engaged, everything we do should be
 		 * put in the transaction to guarantee proper ordering of data
 		 * with respect to both metadata and other data */
 		else if(engaged)

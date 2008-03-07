@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -14,9 +14,9 @@
  * R) Release       B) Add befores
  * 
  * The following table shows the possible states and what operations are valid.
- * Notice that each of A, R, W, and B above sets a bit in the state of an
+ * Notice that each of A, R, W, and B above sets a bit in the state of a
  * patchgroup. Adding a before means that the patchgroup now has before,
- * releasing an patchgroup means it is now released, etc.
+ * releasing a patchgroup means it is now released, etc.
  * 
  * A R W B  Can do: [ (W) means we do not allow this now, but plan to when we
  * -------            work out how to hide changes from other clients. ]
