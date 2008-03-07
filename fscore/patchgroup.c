@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -22,17 +22,18 @@
 /* Atomic patchgroup TODOs:
  *
  * Correctness:
- * - detect that a journal is present for the filesystems used by an patchgroup
+ * - detect that a journal is present for the filesystems used by a patchgroup
  * - detect cyclic dependencies among patchgroup transactions (patch update)
  *   and block the second patchgroup transaction
  * - support multi-device transactions
  *
  * Performance:
  * - only add holds to the needed journal_bds
- * - make dependencies on an patchgroup transaction depend on the commit record
+ * - make dependencies on a patchgroup transaction depend on the commit record
  */
 
 /* TODO: describe big picture re why patch_add_depend() usage is safe */
+/* TODO: make fewer empty patches (e.g. when only one patchgroup is engaged) */
 
 struct patchgroup {
 	patchgroup_id_t id;
@@ -313,7 +314,7 @@ int patchgroup_add_depend(patchgroup_t * after, patchgroup_t * before)
 		return -EINVAL;
 	Dprintf("%s(): after = %p -> before = %p, debug = %d\n", __FUNCTION__, after, before, FSTITCH_DEBUG_COUNT());
 	/* we only create head => tail directly if we need to: when we are adding
-	 * an after to an patchgroup and it still has both its head and tail */
+	 * an after to a patchgroup and it still has both its head and tail */
 	if(WEAK(before->head) && WEAK(before->tail))
 	{
 		/* for efficiency, when that head and tail are not already connected
