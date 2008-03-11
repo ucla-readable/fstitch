@@ -1,0 +1,67 @@
+create a ordered journal consistenty model that can fsync() individual files?
+	fast-quality?
+
+fstitch for dbs: patchgroups with journal without double write?
+	merge into txn
+		double write (more bytes written)
+		write once and activate (fragmentation)
+	breakup txns (more seeks)
+
+what scenarios are slow? eg gfs appends (many?)
+simplify db and disk, opt small file use
+	TODO: what happens with a directio write on ext3?
+multiple outstanding journal txns for linux?
+more towards log structured fs?
+improve perf of os on commit logs
+atomic software updates
+	shadow paging? don't do journaling b/c needless
+
+
+look at txn implementations
+combine multiple commits?
+coordinate mulitple txns?
+
+
+
+allow multiple txns?
+	do multiple txns matter for non-data journaling?
+		ordered data: yes.
+		writeback: yes if many dirent changes
+	journal right now assumes write txns in order. what to watch?
+	must either be able to linearize or merge txns
+		linearize: file can be in <= 1 txn at a time, do not free until commit?
+	note: this weakens existing consistency guarantee. could it break multi-process interactions?
+	will need to be able to sync subset of patches to take advantage of this
+	may want txn logs to be contiguous for more than 4kB?
+	only need to merge txns if both are not yet committed
+		add record to each that says "txn FOO is also part of this txn" which makes neither commited until both are
+			what about intra-txn ordering? (eg create-delete file)
+				thm: txns are order independent until the merge. so after the merge, write just one txn stream.
+					not true. create-delete is not a cycle. thm: one txn can be ran before the other, then run the merged txn. include this order in the merge record? that means scanning the entire txn before playing it when recovering. but 400MB isn't too much to scan. have a special area in the journal for merge records?
+
+patch.depend_on_this_instead for patches in live part of file system that are jouraled, point to commit patch
+
+create callback for when write()'s effects are commited. could build userspace fstitch on top of this.
+
+atomic commit
+	hold in memory?
+	allow non-txn commits on same fs?
+		above fs?
+			must understand fs semantics? is this too complex?
+		patch level?
+			delay marking global resources free until commit? (eg blocks, inodes)
+			group descriptors and superblock
+rollback
+	detect whether read from disk or read lower patches for each bit
+	expensive to enact may be ok
+multiple views
+
+
+
+ntfs and txf:
+physical and logical txns
+logical log at ~LFS level, but interacts with fs in step
+	txns use cancel records
+txn effects are hidden to non-txns
+but an op in a txn can fail because of an earlier op in another txn
+fsync() syncs whole fs because apps came to depend on that behavior, but ntfs does efficiently support concurrent txn syncs
