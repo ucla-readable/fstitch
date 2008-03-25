@@ -38,6 +38,7 @@ static __inline char * strdup(const char * s)
 	return c;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 22)
 static __inline int strcasecmp(const char * s1, const char * s2)
 {
 	while(tolower(*s1) == tolower(*s2++))
@@ -45,6 +46,7 @@ static __inline int strcasecmp(const char * s1, const char * s2)
 			return 0;
 	return tolower(*s1) - tolower(*--s2);
 }
+#endif
 
 #include <linux/types.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 19)
