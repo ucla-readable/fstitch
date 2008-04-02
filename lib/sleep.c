@@ -8,6 +8,7 @@
 #ifdef __KERNEL__
 
 #include <linux/module.h>
+#include <linux/sched.h>
 
 int jsleep(int32_t jiffies)
 {
