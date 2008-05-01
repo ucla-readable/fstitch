@@ -564,7 +564,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	patch_t * patch;
 	patch_t * patch_index_next;
 	uint32_t number;
-	int r, metadata = !info->only_metadata;
+	int r, ordered_pivot = 0, metadata = !info->only_metadata;
 	const int engaged = patchgroup_engaged();
 	
 	/* FIXME: make this module support counts other than 1 */
@@ -589,15 +589,50 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 	
 	if(info->only_metadata)
 	{
+		if(engaged)
+		{
+			/* scan the block to see if all patches are data patches and whether they
+			 * have any off-block befores (other than info->hold): if they are data and
+			 * have no incompatible befores, we can pivot them to the ordered data
+			 * position (before info->wait) instead of pulling them into the transaction
+			 * (as a result of being in a patchgroup) since this will avoid writing the
+			 * data twice but provide the same semantics */
+			for(patch = block->index_patches[object->graph_index].head; patch; patch = patch->ddesc_index_next)
+			{
+				patchdep_t * dep;
+				if(!(patch->flags & PATCH_DATA))
+					break;
+				for(dep = patch->befores; dep; dep = dep->before.next)
+				{
+					if(dep->before.desc == info->hold)
+						continue;
+					if(dep->before.desc->block != block)
+						break;
+				}
+				if(dep)
+					break;
+			}
+			if(!patch)
+				ordered_pivot = 1;
+		}
+		
 		number = (uint32_t) hash_map_find_val(info->block_map, (void *) block_number);
 		/* if we already have the block in the journal, it must have metadata */
 		if(number)
+		{
 			metadata = 1;
+			/* and it also can't be pivoted */
+			ordered_pivot = 0;
+		}
 		/* if there is a patchgroup engaged, everything we do should be
 		 * put in the transaction to guarantee proper ordering of data
 		 * with respect to both metadata and other data */
 		else if(engaged)
-			metadata = 1;
+		{
+			/* unless we will be pivoting */
+			if(!ordered_pivot)
+				metadata = 1;
+		}
 		else
 			/* otherwise, scan for metadata */
 			for(patch = block->index_patches[object->graph_index].head; patch; patch = patch->ddesc_index_next)
@@ -617,39 +652,48 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 		assert(patch->owner == object);
 		patch_index_next = patch->ddesc_index_next; /* in case changes */
 		
-		if(metadata)
+		if(ordered_pivot)
 		{
-			r = patch_add_depend(info->data, patch);
-			if(r < 0)
-				kpanic("Holy Mackerel!");
+			patch_remove_depend(patch, info->hold);
+			patch_add_depend(info->wait, patch);
 		}
-		
-		while(*deps)
+		else
 		{
-			patch_t * dep = (*deps)->before.desc;
-			/* if it's hold, or if it's on the same block, leave it alone */
-			if(dep == info->hold || (dep->block && dep->block->ddesc == block->ddesc))
+			if(metadata)
 			{
-				deps = &(*deps)->before.next;
-				if(dep == info->hold)
-					needs_hold = 0;
-				continue;
+				/* must be written before the commit record is erased */
+				r = patch_add_depend(info->data, patch);
+				if(r < 0)
+					kpanic("Holy Mackerel!");
 			}
-			/* otherwise remove this dependency */
-			/* WARNING: this makes the journal incompatible
-			 * with patchgroups between different file systems */
-			patch_dep_remove(*deps);
-		}
-		
-		if(needs_hold)
-		{
-			patch->flags |= PATCH_SAFE_AFTER;
-			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_SAFE_AFTER);
-			r = patch_add_depend(patch, info->hold);
-			if(r < 0)
-				kpanic("Holy Mackerel!");
-			patch->flags &= ~PATCH_SAFE_AFTER;
-			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CLEAR_FLAGS, patch, PATCH_SAFE_AFTER);
+			
+			while(*deps)
+			{
+				patch_t * dep = (*deps)->before.desc;
+				/* if it's hold, or if it's on the same block, leave it alone */
+				if(dep == info->hold || (dep->block && dep->block->ddesc == block->ddesc))
+				{
+					deps = &(*deps)->before.next;
+					if(dep == info->hold)
+						needs_hold = 0;
+					continue;
+				}
+				/* otherwise remove this dependency */
+				/* WARNING: this makes the journal incompatible
+				 * with patchgroups between different file systems */
+				patch_dep_remove(*deps);
+			}
+			
+			if(needs_hold)
+			{
+				patch->flags |= PATCH_SAFE_AFTER;
+				FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_SAFE_AFTER);
+				r = patch_add_depend(patch, info->hold);
+				if(r < 0)
+					kpanic("Holy Mackerel!");
+				patch->flags &= ~PATCH_SAFE_AFTER;
+				FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CLEAR_FLAGS, patch, PATCH_SAFE_AFTER);
+			}
 		}
 		
 		if(engaged)
