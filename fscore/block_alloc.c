@@ -32,6 +32,7 @@ int block_alloc_set_freed(block_alloc_head_t * alloc, uint32_t block, patch_t * 
 	if(!record)
 		return -ENOMEM;
 	record->block = block;
+	WEAK_INIT(record->clear);
 	patch_weak_retain(clear, &record->clear, block_alloc_satisfy_callback, alloc);
 	r = hash_map_insert(alloc->map, (void *) block, record);
 	if(r < 0)
