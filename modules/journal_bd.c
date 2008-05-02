@@ -705,7 +705,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 				if(((*deps)->after.desc->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.desc->type == EMPTY)
 					patch_dep_remove(*deps);
 				else
-					deps = &(*deps)->before.next;
+					deps = &(*deps)->after.next;
 			/* and set the patchgroup exemption flag */
 			patch->flags |= PATCH_NO_PATCHGROUP;
 			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, patch, PATCH_NO_PATCHGROUP);
