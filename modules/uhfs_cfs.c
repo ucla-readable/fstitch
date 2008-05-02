@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -374,7 +374,7 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 	uint32_t dataoffset = (offset % blocksize);
 	uint32_t size_written = 0, filesize = 0, target_size;
 	patch_t * write_head = state->write_head ? *state->write_head : NULL;
-	patch_t * head = write_head, * tail;
+	patch_t * head = write_head;
 	int r = 0;
 
 	if (uf->size_id)
@@ -444,9 +444,6 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 			/* can we do better than this? */
 			assert(r >= 0);
 
-			/* save the tail */
-			tail = head;
-
 			/* zero it */
 			r = patch_create_init(block, bd, &head);
 			if (r < 0)
@@ -456,10 +453,6 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 
 			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, head, PATCH_DATA);
 			head->flags |= PATCH_DATA;
-
-			r = patchgroup_finish_head(head);
-			/* can we do better than this? */
-			assert(r >= 0);
 
 			/* append it to the file, depending on zeroing it */
 			r = CALL(state->lfs, append_file_block, uf->inner, number, &head);
@@ -472,6 +465,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 				CALL(state->lfs, write_block, block, number, &head);
 				goto no_block;
 			}
+
+			r = patchgroup_finish_head(head);
+			/* can we do better than this? */
+			assert(r >= 0);
 
 			/* the data written will end up depending on the zeroing
 			 * automatically, so just use the previous head here */
@@ -498,9 +495,6 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 		r = patchgroup_prepare_head(&head);
 		/* can we do better than this? */
 		assert(r >= 0);
-
-		/* save the tail */
-		tail = head;
 
 		/* write the data to the block */
 		r = patch_create_byte(block, bd, dataoffset, length, data ? (uint8_t *) data + size_written : NULL, &head);
