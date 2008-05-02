@@ -11,6 +11,7 @@
 #include <fscore/modman.h>
 #include <fscore/debug.h>
 #include <fscore/feature.h>
+#include <fscore/block_alloc.h>
 
 #include <modules/ext2.h>
 #include <modules/ext2_lfs.h>
@@ -324,6 +325,7 @@ static int ext2_minode_cache_init(ext2_minode_cache_t * cache)
 }
 
 
+/* this could probably be a macro */
 static uint16_t dirent_rec_len(uint16_t name_len)
 {
 	return 8 + ((name_len - 1) / 4 + 1) * 4;
@@ -952,6 +954,15 @@ static int ext2_write_block_bitmap(LFS_t * object, uint32_t blockno, bool value,
 	else if(!value)
 		return 0;
 	
+#if BLOCK_ALLOC_DEPS
+	if(!value && BLOCK_ALLOC_HEAD_VALID(&object->alloc_deps))
+	{
+		/* if we're freeing the block, put the head into the block alloc head */
+		r = block_alloc_set_freed(&object->alloc_deps, blockno, *head);
+		if(r < 0)
+			return r;
+	}
+#endif
 	/* bit patches take offset in increments of 32 bits */
 	r = patch_create_bit(info->bitmap_cache, info->ubd, block_in_group / 32, 1 << (block_in_group % 32), head);
 	if(r < 0)
@@ -2059,6 +2070,9 @@ static int ext2_set_symlink(LFS_t * object, ext2_fdesc_t * f, const void * data,
 	{
 		if(f->f_ip->i_size > EXT2_N_BLOCKS * sizeof(uint32_t))
 		{
+			/* XXX soft updates violation! this should depend on having removed the
+			 * pointer to the block from the inode... does this even happen though? */
+			printf("%s(): possibly broken dependency code being used!\n", __FUNCTION__);
 			_ext2_free_block(object, f->f_ip->i_block[0], head);
 			INODE_SET(f, i_block[0], 0);
 		}
@@ -3391,6 +3405,10 @@ static int ext2_destroy(LFS_t * lfs)
 	free((EXT2_Super_t *) info->super);
 	free((EXT2_group_desc_t *) info->groups);
 	free((int8_t *)info->debts);
+#if BLOCK_ALLOC_DEPS
+	if(BLOCK_ALLOC_HEAD_VALID(&lfs->alloc_deps))
+		block_alloc_head_destroy(&lfs->alloc_deps);
+#endif
 	memset(info, 0, sizeof(*info));
 	free(info);
 	
@@ -3667,6 +3685,11 @@ LFS_t * ext2_lfs(BD_t * block_device)
 	
 	info->ubd = lfs->blockdev = block_device;
 	info->write_head = CALL(block_device, get_write_head);
+#if BLOCK_ALLOC_DEPS
+	r = block_alloc_head_init(&lfs->alloc_deps);
+	if(r < 0)
+		goto error_info;
+#endif
 	
 	info->filecache = NULL;
 	
@@ -3705,6 +3728,10 @@ LFS_t * ext2_lfs(BD_t * block_device)
   error_minode:
 	ext2_minode_cache_deinit(&info->minode_cache);
   error_info:
+#if BLOCK_ALLOC_DEPS
+	if(BLOCK_ALLOC_HEAD_VALID(&lfs->alloc_deps))
+		block_alloc_head_destroy(&lfs->alloc_deps);
+#endif
 	free(info);
 	return NULL;
 }

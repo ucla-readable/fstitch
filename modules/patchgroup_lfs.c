@@ -8,6 +8,7 @@
 #include <fscore/feature.h>
 #include <fscore/modman.h>
 #include <fscore/patchgroup.h>
+#include <fscore/block_alloc.h>
 
 #include <modules/patchgroup_lfs.h>
 
@@ -318,6 +319,9 @@ LFS_t * patchgroup_lfs(LFS_t * base)
 	info->lfs = base;
 	lfs->blocksize = base->blocksize;
 	lfs->blockdev = base->blockdev;
+#if BLOCK_ALLOC_DEPS
+	lfs->alloc_deps = base->alloc_deps;
+#endif
 	
 	if(modman_add_anon_lfs(lfs, __FUNCTION__))
 	{

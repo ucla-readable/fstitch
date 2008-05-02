@@ -8,15 +8,24 @@
 #include <lib/hash_map.h>
 #include <fscore/patch.h>
 
-/* This library uses patch callbacks. But, we don't use this library yet, so
- * just disable it unless the callbacks are enabled. */
 #if PATCH_WEAKREF_CALLBACKS
+#define BLOCK_ALLOC_DEPS 1
+#else
+/* This library uses patch callbacks. If we don't have them, disable it. */
+#define BLOCK_ALLOC_DEPS 0
+#endif
 
+#if BLOCK_ALLOC_DEPS
+
+/* note that this structure is copied by layered LFS modules,
+ * so it should contain only pointers and read-only data */
 struct block_alloc_head {
 	/* block number -> patch that clears all pointers to it */
 	hash_map_t * map;
 };
 typedef struct block_alloc_head block_alloc_head_t;
+#define BLOCK_ALLOC_HEAD_INIT(head) do { (head)->map = NULL; } while(0)
+#define BLOCK_ALLOC_HEAD_VALID(head) ((head)->map != NULL)
 
 /* Add a block to the block alloc head, along with a patch which clears all
  * pointers to it. Later data written to the block during a subsequent
@@ -34,6 +43,6 @@ int block_alloc_notify_alloc(block_alloc_head_t * alloc, uint32_t block);
 int block_alloc_head_init(block_alloc_head_t * alloc);
 void block_alloc_head_destroy(block_alloc_head_t * alloc);
 
-#endif /* PATCH_WEAKREF_CALLBACKS */
+#endif /* BLOCK_ALLOC_DEPS */
 
 #endif /* __FSTITCH_FSCORE_BLOCK_ALLOC_H */

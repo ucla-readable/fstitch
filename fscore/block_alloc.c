@@ -8,9 +8,7 @@
 #include <fscore/patch.h>
 #include <fscore/block_alloc.h>
 
-/* This library uses patch callbacks. But, we don't use this library yet, so
- * just disable it unless the callbacks are enabled. */
-#if PATCH_WEAKREF_CALLBACKS
+#if BLOCK_ALLOC_DEPS
 
 typedef struct {
 	/* clear must be the first element! */
@@ -92,4 +90,4 @@ void block_alloc_head_destroy(block_alloc_head_t * alloc)
 	alloc->map = NULL;
 }
 
-#endif /* PATCH_WEAKREF_CALLBACKS */
+#endif /* BLOCK_ALLOC_DEPS */

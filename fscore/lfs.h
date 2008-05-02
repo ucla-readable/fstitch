@@ -14,6 +14,7 @@
 #include <fscore/dirent.h>
 #include <fscore/inode.h>
 #include <fscore/patchgroup.h>
+#include <fscore/block_alloc.h>
 
 /* lfs_add_fork_head() should be called inside an LFS operation for each
  * patch graph fork head not reachable from *head upon return */
@@ -21,7 +22,7 @@
 
 /* Ideally, LFS wouldn't have any calls that weren't directly related to
  * blocks. However, the on-disk structure of directory files is a part
- * of the specification of the filesystem. So we have to handle it
+ * of the specification of the filesystem. So, we have to handle it
  * inside the LFS module. Thus a few of the calls below (like
  * "get_dirent") seem a little bit higher-level than you would otherwise
  * expect from such a low-level interface.
@@ -48,6 +49,9 @@ struct LFS {
 	DECLARE(LFS_t, int, get_root, inode_t * inode);
 	uint16_t blocksize;
 	BD_t * blockdev;
+#if BLOCK_ALLOC_DEPS
+	block_alloc_head_t alloc_deps;
+#endif
 	DECLARE(LFS_t, uint32_t, allocate_block, fdesc_t * file, int purpose, patch_t ** head);
 	DECLARE(LFS_t, bdesc_t *, lookup_block, uint32_t number, page_t * page);
 	DECLARE(LFS_t, bdesc_t *, synthetic_lookup_block, uint32_t number, page_t * page);
@@ -75,10 +79,17 @@ struct LFS {
 	DECLARE(LFS_t, int, set_metadata2_fdesc, fdesc_t * file, const fsmetadata_t * fsm, size_t nfsm, patch_t ** head);
 };
 
+#if BLOCK_ALLOC_DEPS
+#define LFS_BLOCK_ALLOC_INIT(lfs) BLOCK_ALLOC_HEAD_INIT(&(lfs)->alloc_deps)
+#else
+#define LFS_BLOCK_ALLOC_INIT(lfs)
+#endif
+
 #define LFS_INIT(lfs, module) { \
 	OBJ_INIT(lfs, module); \
 	ASSIGN(lfs, module, get_root); \
 	(lfs)->blocksize = 0; (lfs)->blockdev = NULL; \
+	LFS_BLOCK_ALLOC_INIT(lfs); \
 	ASSIGN(lfs, module, allocate_block); \
 	ASSIGN(lfs, module, lookup_block); \
 	ASSIGN(lfs, module, synthetic_lookup_block); \

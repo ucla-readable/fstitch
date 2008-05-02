@@ -9,6 +9,7 @@
 #include <fscore/patch.h>
 #include <fscore/debug.h>
 #include <fscore/patchgroup.h>
+#include <fscore/block_alloc.h>
 #include <fscore/lfs.h>
 #include <fscore/cfs.h>
 
@@ -419,7 +420,8 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 		number = CALL(state->lfs, get_file_block, uf->inner, blockoffset + (offset % blocksize) - dataoffset + size_written);
 		if (number == INVALID_BLOCK)
 		{
-			number = CALL(state->lfs, allocate_block, uf->inner, 0, &head);
+			patch_t * alloc = write_head;
+			number = CALL(state->lfs, allocate_block, uf->inner, 0, &alloc);
 			if (number == INVALID_BLOCK)
 			{
 				r = -ENOSPC;
@@ -432,13 +434,25 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 			{
 				int t;
 				no_block:
-				head = write_head;
-				t = CALL(state->lfs, free_block, uf->inner, number, &head);
+				/* Make sure we don't confuse block alloc's freed pointer!
+				 * This is suboptimal, but it's only an error case anyway. */
+				t = CALL(state->lfs, free_block, uf->inner, number, &alloc);
 				assert(t >= 0);
 				if(size_written)
 					goto uhfs_write_written_exit;
 				goto uhfs_write_exit;
 			}
+
+#if BLOCK_ALLOC_DEPS
+			if (BLOCK_ALLOC_HEAD_VALID(&state->lfs->alloc_deps))
+			{
+				r = block_alloc_get_freed(&state->lfs->alloc_deps, number, &head);
+				if (r < 0)
+					goto no_block;
+			}
+			else
+#endif
+				head = alloc;
 
 			/* zero it */
 			r = patch_create_init(block, bd, &head);
@@ -450,6 +464,16 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, head, PATCH_DATA);
 			head->flags |= PATCH_DATA;
 
+#if BLOCK_ALLOC_DEPS
+			if (BLOCK_ALLOC_HEAD_VALID(&state->lfs->alloc_deps))
+			{
+				r = patch_create_empty_list(NULL, &head, alloc, head, NULL);
+				if (r < 0)
+					goto no_block;
+				FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, head, "and");
+				patch_set_empty_declare(head);
+			}
+#endif
 			r = patchgroup_prepare_head(&head);
 			/* can we do better than this? */
 			assert(r >= 0);
@@ -465,6 +489,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 				CALL(state->lfs, write_block, block, number, &head);
 				goto no_block;
 			}
+#if BLOCK_ALLOC_DEPS
+			if (BLOCK_ALLOC_HEAD_VALID(&state->lfs->alloc_deps))
+				block_alloc_notify_alloc(&state->lfs->alloc_deps, number);
+#endif
 
 			r = patchgroup_finish_head(head);
 			/* can we do better than this? */
