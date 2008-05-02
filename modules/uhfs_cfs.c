@@ -440,10 +440,6 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 				goto uhfs_write_exit;
 			}
 
-			r = patchgroup_prepare_head(&head);
-			/* can we do better than this? */
-			assert(r >= 0);
-
 			/* zero it */
 			r = patch_create_init(block, bd, &head);
 			if (r < 0)
@@ -453,6 +449,10 @@ static int uhfs_write(CFS_t * cfs, fdesc_t * fdesc, page_t * page, const void * 
 
 			FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, head, PATCH_DATA);
 			head->flags |= PATCH_DATA;
+
+			r = patchgroup_prepare_head(&head);
+			/* can we do better than this? */
+			assert(r >= 0);
 
 			/* append it to the file, depending on zeroing it */
 			r = CALL(state->lfs, append_file_block, uf->inner, number, &head);
