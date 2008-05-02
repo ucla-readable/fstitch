@@ -59,6 +59,8 @@ int block_alloc_get_freed(block_alloc_head_t * alloc, uint32_t block, patch_t **
 		int r = patch_create_empty_list(NULL, &empty, record->clear, *head, NULL);
 		if(r < 0)
 			return r;
+		FSTITCH_DEBUG_SEND(FDB_MODULE_INFO, FDB_INFO_PATCH_LABEL, empty, "and");
+		patch_set_empty_declare(empty);
 		*head = empty;
 	}
 	return 0;
