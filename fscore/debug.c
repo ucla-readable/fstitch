@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -65,7 +65,6 @@ static int debug_count = 0;
 /* I/O system prototypes */
 static int fstitch_debug_io_init(void);
 static int fstitch_debug_io_write(void * data, uint32_t size);
-static void fstitch_debug_io_command(void * arg);
 
 #ifdef __KERNEL__
 
@@ -79,6 +78,12 @@ static int proc_shutdown;
 static struct dentry * debug_count_dentry;
 #endif
 
+/* The proc filesystem seems to have a limitation of 2GB worth of reads from a
+ * file, probably related to the off_t parameter to this function. There doesn't
+ * seem to be anything we can do about this aside from switch this to be a
+ * character device instead of proc file, or perhaps close and reopen the file
+ * from userspace when we near the limit. If you run into the limit, kfstitchd
+ * locks up and the system will likely need to be rebooted to recover. */
 static int fstitch_debug_proc_read(char * page, char ** start, off_t off, int count, int * eof, void * data)
 {
 	off_t size;
@@ -116,11 +121,6 @@ static int fstitch_debug_io_write(void * data, uint32_t len)
 		proc_buffer[proc_buffer_wpos++ % DEBUG_PROC_SIZE] = buf[i];
 	}
 	return len;
-}
-
-static void fstitch_debug_io_command(void * arg)
-{
-	/* kfstitchd does not currently support command reading */
 }
 
 static void fstitch_debug_shutdown(void * ignore)
@@ -190,11 +190,6 @@ static FILE * file_output;
 static int fstitch_debug_io_write(void * data, uint32_t len)
 {
 	return fwrite(data, 1, len, file_output);
-}
-
-static void fstitch_debug_io_command(void * arg)
-{
-	/* uufstitchd does not currently support command reading */
 }
 
 static void fstitch_debug_shutdown(void * ignore)
@@ -302,10 +297,6 @@ int fstitch_debug_init(void)
 	
 	printf("Initializing featherstitch debugging interface...\n");
 	
-	r = sched_register(fstitch_debug_io_command, NULL, HZ / 10);
-	if(r < 0)
-		return r;
-
 	r = fstitch_debug_io_init();
 	if(r < 0)
 		return r;
@@ -382,8 +373,6 @@ int fstitch_debug_send(uint16_t module, uint16_t opcode, const char * file, int 
 	int timestamp = jiffy_time();
 	va_list ap;
 	va_start(ap, function);
-	
-	fstitch_debug_io_command(NULL);
 	
 	/* look up the right module and opcode indices */
 	for(m = 0; modules[m].opcodes; m++)
