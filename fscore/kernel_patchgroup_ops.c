@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -42,10 +42,12 @@ static int kernel_patchgroup_ioctl(struct inode * inode, struct file * filp, uns
 	if (cmd_args.str)
 	{
 		long len = strnlen_user(cmd_args.str, STR_LEN_MAX);
-		if (len < 1 || STR_LEN_MAX < len)
+		if (len < 1 || STR_LEN_MAX < len ||
+		    copy_from_user(str, (void __user *) cmd_args.str, len))
+		{
+			fstitchd_leave(1);
 			return -EFAULT;
-		if (copy_from_user(str, (void __user *) cmd_args.str, len))
-			return -EFAULT;
+		}
 	}
 
 	switch (cmd)

@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -118,20 +118,23 @@ static inline void fstitchd_leave(int cleanup)
 {
 	assert(fstitchd_global_lock.locked);
 	assert(fstitchd_global_lock.process == current->pid);
-	if(--fstitchd_global_lock.locked)
-		return;
-	while(fstitchd_global_lock.callbacks)
+	if(fstitchd_global_lock.locked == 1)
 	{
-		struct callback_list * first = fstitchd_global_lock.callbacks;
-		fstitchd_global_lock.callbacks = first->next;
-		first->callback(first->data, first->count);
-		free(first);
+		while(fstitchd_global_lock.callbacks)
+		{
+			struct callback_list * first = fstitchd_global_lock.callbacks;
+			fstitchd_global_lock.callbacks = first->next;
+			first->callback(first->data, first->count);
+			free(first);
+		}
+		patchgroup_scope_set_current(NULL);
+		if(cleanup)
+			sched_run_cleanup();
+		fstitchd_global_lock.process = 0;
+		assert(fstitchd_global_lock.locked == 1);
 	}
-	patchgroup_scope_set_current(NULL);
-	if(cleanup)
-		sched_run_cleanup();
-	fstitchd_global_lock.process = 0;
-	assert(!fstitchd_global_lock.locked);
+	/* safe to do this? I guess... */
+	fstitchd_global_lock.locked--;
 }
 
 #endif // !__FSTITCH_FSCORE_KERNEL_SERVE_H
