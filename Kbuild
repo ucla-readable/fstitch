@@ -19,7 +19,6 @@ obj-m += kfstitchd.o
 
 KFSTITCHD_LIB_OBJS := \
               assert.o \
-              qsort.o \
               vector.o \
               hash_map.o \
               strtol.o \

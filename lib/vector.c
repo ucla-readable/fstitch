@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -121,11 +121,13 @@ void vector_clear(vector_t * v)
 	v->size = 0;
 }
 
+#ifndef __KERNEL__
 void vector_sort(vector_t *v, int (*compar)(const void *a, const void *b))
 {
 	if (v->size < 2) return;
 	qsort(v->elts, v->size, sizeof(void*), compar);
 }
+#endif
 
 
 //
