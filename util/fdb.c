@@ -3317,7 +3317,7 @@ static int command_status(int argc, const char * argv[])
 	{
 		int arrows = (arrow_count + 1) / 2;
 		printf("Debugging %s, read %d opcode%s, applied %d\n", input_name, opcodes, (opcodes == 1) ? "" : "s", applied);
-		printf("[Info: %d patch%s, %d dependenc%s (%d raw)]\n", patch_count, (patch_count == 1) ? "" : "s", arrows, (arrows == 1) ? "y" : "ies", arrow_count);
+		printf("[Info: %d patch%s, %d dependenc%s (%d raw)]\n", patch_count, (patch_count == 1) ? "" : "es", arrows, (arrows == 1) ? "y" : "ies", arrow_count);
 	}
 	else
 	{
