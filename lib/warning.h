@@ -6,7 +6,7 @@
 #define FSTITCH_LIB_WARNING_H
 
 /* Printing warning messages every time something frequent happens can really
- * slow Featherstitch down. This library allows such messages to easily be
+ * slow Featherstitch down. This "library" allows such messages to easily be
  * printed with a specified maximum frequency. Rather than code like this:
  * 
  * void foo(int x, int y)
@@ -35,56 +35,48 @@
 #define DEF_WARNING(name, seconds) static struct warning name = WARNING_INITIALIZER(seconds)
 #define warning(message, period) _warning(message, &(period), __FUNCTION__)
 
-/* _warning(), used to implement the warning() macro, is so short that it should
- * be inlined to save the function call overhead on these (frequent) messages */
-struct warning;
-static inline void _warning(const char * message, struct warning * period, const char * function) __attribute__((always_inline));
-
-/* There are slightly different implementations for the kernel and userspace... */
-
 #ifdef __KERNEL__
 
 #include <linux/sched.h>
-
-struct warning {
-	const int seconds;
-	int32_t last;
-};
-
-#define WARNING_INITIALIZER(seconds) {seconds, 0}
-
-static inline void _warning(const char * message, struct warning * period, const char * function)
-{
-	if(jiffies - period->last > HZ * period->seconds)
-	{
-		printf("%s(): %s\n", function, message);
-		period->last = jiffies;
-	}
-}
+#define LAST_TYPE int32_t
+#define LAST_INITIALIZER 0
 
 #elif defined(UNIXUSER)
 
 #include <sys/time.h>
 #include <time.h>
+#define LAST_TYPE struct timeval
+#define LAST_INITIALIZER {0, 0}
+
+#endif
 
 struct warning {
-	const int seconds;
-	struct timeval last;
+	int seconds, suppressed;
+	LAST_TYPE last;
 };
+#define WARNING_INITIALIZER(seconds) {seconds, 0, LAST_INITIALIZER}
 
-#define WARNING_INITIALIZER(seconds) {seconds, {0, 0}}
-
+/* _warning(), used to implement the warning() macro, is short enough that it
+ * should be inlined to save the function call overhead on these messages */
+static inline void _warning(const char * message, struct warning * period, const char * function) __attribute__((always_inline));
 static inline void _warning(const char * message, struct warning * period, const char * function)
 {
+#ifdef __KERNEL__
+	int32_t now = jiffies;
+	if(now - period->last > HZ * period->seconds)
+#elif defined(UNIXUSER)
 	struct timeval now;
 	gettimeofday(&now, NULL);
 	if(now.tv_sec - period->last.tv_sec > period->seconds && now.tv_usec >= period->last.tv_usec)
+#endif
 	{
-		printf("%s(): %s\n", function, message);
+		const char * format = period->suppressed ? "%s(): %s [suppressed %d]\n" : "%s(): %s\n";
+		printf(format, function, message, period->suppressed);
+		period->suppressed = 0;
 		period->last = now;
 	}
+	else
+		period->suppressed++;
 }
-
-#endif
 
 #endif /* !FSTITCH_LIB_WARNING_H */
