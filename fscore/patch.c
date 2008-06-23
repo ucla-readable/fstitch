@@ -1,8 +1,9 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
 #include <lib/platform.h>
+#include <lib/warning.h>
 #include <lib/pool.h>
 
 #include <fscore/debug.h>
@@ -2512,7 +2513,8 @@ static bool merge_head_dep_safe(const patch_t * head, const patch_t * merge)
 					common[common_index++] = head_b->before.desc;
 					if(common_index > MAX_WIDTH)
 					{
-						printf("%s(): More common patches found than can handle\n", __FUNCTION__);
+						DEF_WARNING(warn, 1);
+						warning("More common patches found than can handle", warn);
 						i = MAX_WIDTH; /* end search since 'common' is full */
 					}
 					goto next_head_b;
