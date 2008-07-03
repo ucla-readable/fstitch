@@ -2966,6 +2966,134 @@ static int command_find(int argc, const char * argv[])
 	return 0;
 }
 
+static int command_graph(int argc, const char * argv[])
+{
+	int start = 0, stop = opcodes;
+	int r, save_applied = applied;
+	struct debug_opcode opcode;
+	int progress = 0, distance = 0, percent = -1;
+	FILE * output;
+	if(argc < 2)
+	{
+		printf("Need a file name for the graph data.\n");
+		return -1;
+	}
+	if(argc == 4)
+	{
+		/* graph an opcode range */
+		start = atoi(argv[2]);
+		stop = atoi(argv[3]);
+		if(start < 0 || start > stop)
+		{
+			printf("Invalid range.\n");
+			return -1;
+		}
+		if(stop > opcodes)
+			stop = opcodes;
+	}
+	else if(argc != 2)
+	{
+		printf("Need a valid opcode range.\n");
+		return -1;
+	}
+	
+	output = fopen(argv[1], "w");
+	if(!output)
+	{
+		perror(argv[1]);
+		return -1;
+	}
+	
+	if(tty)
+	{
+		/* calculate total distance */
+		distance = stop;
+		if(start >= applied)
+			distance -= applied;
+		distance += applied;
+		if(applied >= stop)
+			distance -= stop;
+		printf("Generating graph...     ");
+		fflush(stdout);
+	}
+	
+	if(start < applied)
+		reset_state();
+	while(applied < start)
+	{
+		if(tty)
+		{
+			int p = progress * 100 / distance;
+			if(p > percent)
+			{
+				percent = p;
+				printf("\e[4D%2d%% ", percent);
+				fflush(stdout);
+			}
+		}
+		r = get_opcode(applied, &opcode);
+		if(r < 0)
+		{
+			printf("%crror %d reading opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			fclose(output);
+			return r;
+		}
+		r = apply_opcode(&opcode, NULL, NULL);
+		put_opcode(&opcode);
+		if(r < 0)
+		{
+			printf("%crror %d applying opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			fclose(output);
+			return r;
+		}
+		applied++;
+		progress++;
+	}
+	
+	/* generate the graph */
+	fprintf(output, "%d %d\n", applied, patch_count);
+	while(applied < stop)
+	{
+		if(tty)
+		{
+			int p = progress * 100 / distance;
+			if(p > percent)
+			{
+				percent = p;
+				printf("\e[4D%2d%% ", percent);
+				fflush(stdout);
+			}
+		}
+		r = get_opcode(applied, &opcode);
+		if(r < 0)
+		{
+			printf("%crror %d reading opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			fclose(output);
+			return r;
+		}
+		r = apply_opcode(&opcode, NULL, NULL);
+		put_opcode(&opcode);
+		if(r < 0)
+		{
+			printf("%crror %d applying opcode %d (%s)\n", tty ? 'e' : 'E', -r, applied + 1, strerror(-r));
+			fclose(output);
+			return r;
+		}
+		applied++;
+		progress++;
+		fprintf(output, "%d %d\n", applied, patch_count);
+	}
+	fclose(output);
+	
+	r = restore_initial_state(save_applied, &progress, &distance, &percent);
+	if(r < 0)
+		return r;
+	if(tty)
+		printf("\e[4D100%%\n");
+	
+	return 0;
+}
+
 static void print_patch_brief(struct patch * patch)
 {
 	struct arrow * count;
@@ -3569,6 +3697,7 @@ struct {
 	{"jump", "Jump system state to a specified number of opcodes.", command_jump, 0},
 	{"list", "List opcodes in a specified range, or all opcodes by default.", command_list, 0},
 	{"find", "Find max or min patch count, optionally in an opcode range.", command_find, 0},
+	{"graph", "Graph number of patches over time into a file.", command_graph, 0},
 	{"lookup", "Lookup block numbers or block devices by address.", command_lookup, 0},
 	{"mark", "Mark a patch to be highlighted in output.", command_mark, 0},
 	{"option", "Get or set rendering options: freelist, grouping.", command_option, 0},
