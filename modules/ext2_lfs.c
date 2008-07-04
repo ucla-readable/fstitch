@@ -236,7 +236,7 @@ static int check_super(LFS_t * object)
 	printf("\tMagic Number 0x%x\n", info->super->s_magic);
 	printf("\tBlocksize might be %d\n", info->ubd->blocksize);
 	printf("\tNumber of inodes %d\n", info->super->s_inodes_count);
-	printf("\tSize of inode sturcture %d\n", info->super->s_inode_size);
+	printf("\tSize of inode structure %d\n", info->super->s_inode_size);
 	printf("\tNumber of free inodes %d\n", info->super->s_free_inodes_count);
 	printf("\tNumber of blocks %d\n", info->super->s_blocks_count);
 	printf("\tEXT2 Block size %d\n", 1024 << info->super->s_log_block_size);

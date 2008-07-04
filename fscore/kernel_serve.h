@@ -63,6 +63,7 @@ static inline void fstitchd_enter(void)
 #if CONTENTION_WARNING
 	int tries = 0;
 #endif
+	might_sleep();
 	if(fstitchd_have_lock())
 	{
 		fstitchd_global_lock.locked++;

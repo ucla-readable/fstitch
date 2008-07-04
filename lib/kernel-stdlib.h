@@ -8,6 +8,7 @@
 #define MALLOC_ACCOUNT 0
 
 #include <linux/slab.h>
+#include <linux/interrupt.h>
 // for non-huge regions only
 static inline void * malloc(size_t size)
 {
@@ -15,7 +16,7 @@ static inline void * malloc(size_t size)
 	extern unsigned long long malloc_total;
 	malloc_total += size;
 #endif
-	return kmalloc(size, GFP_KERNEL);
+	return kmalloc(size, (in_atomic() || irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL);
 }
 
 static inline void * calloc(size_t nmemb, size_t size)
@@ -52,7 +53,7 @@ static __inline void sfree(void * p, size_t size) __attribute__((always_inline))
 static __inline void * smalloc(size_t size)
 {
 	if (size <= KMALLOC_MAX)
-		return kmalloc(size, GFP_KERNEL);
+		return kmalloc(size, (in_atomic() || irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL);
 #if MALLOC_ACCOUNT
 	extern unsigned long long malloc_total;
 	malloc_total += size;

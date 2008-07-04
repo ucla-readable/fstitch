@@ -445,7 +445,7 @@ static void propagate_level_change_thru_empty(patch_t * empty_after, uint16_t pr
 {
 	/* recursion-on-the-heap support */
 	struct state {
-		patchdep_t * emptys_afters;
+		patchdep_t * empties_afters;
 		uint16_t prev_level;
 		uint16_t new_level;
 	};
@@ -460,10 +460,10 @@ static void propagate_level_change_thru_empty(patch_t * empty_after, uint16_t pr
 	assert(prev_level != new_level);
 	assert(prev_level != BDLEVEL_NONE || new_level != BDLEVEL_NONE);
 
-	patchdep_t * emptys_afters = empty_after->afters;
-	for(; emptys_afters; emptys_afters = emptys_afters->after.next)
+	patchdep_t * empties_afters = empty_after->afters;
+	for(; empties_afters; empties_afters = empties_afters->after.next)
 	{
-		patch_t * after = emptys_afters->after.desc;
+		patch_t * after = empties_afters->after.desc;
 		uint16_t after_prev_level = patch_level(after);
 
 		if(prev_level != BDLEVEL_NONE)
@@ -486,7 +486,7 @@ static void propagate_level_change_thru_empty(patch_t * empty_after, uint16_t pr
 				/* Recursively propagate the level change; equivalent to
 				 * propagate_level_change_thru_empty
 				 *  (after, after_prev_level, after_new_level) */
-				state->emptys_afters = emptys_afters;
+				state->empties_afters = empties_afters;
 				state->prev_level = prev_level;
 				state->new_level = new_level;
 
@@ -506,7 +506,7 @@ static void propagate_level_change_thru_empty(patch_t * empty_after, uint16_t pr
 	if(state != &states[0])
 	{
 		state--;
-		emptys_afters = state->emptys_afters;
+		empties_afters = state->empties_afters;
 		prev_level = state->prev_level;
 		new_level = state->new_level;
 		goto recurse_resume;
@@ -573,21 +573,49 @@ static bool extern_after_count_is_correct(const bdesc_t * block)
 }
 #endif /* BDESC_EXTERN_AFTER_COUNT_DEBUG */
 
+DEF_WARNING(propagate_extern_after_thru_empties, 1);
+
 /* propagate a depend add/remove through a empty after,
  * to increment/decrement extern_after_count for 'block' */
-static void propagate_extern_after_change_thru_empty_after(const patch_t * empty_after, bdesc_t * block, bool add)
+static void propagate_extern_after_change_thru_empty_after(const patch_t * empty_after, bdesc_t * const block, const bool add)
 {
+	/* recursion-on-the-heap support */
+	struct state {
+		const patch_t * empty_after;
+		patchdep_t * dep;
+	};
+	typedef struct state state_t;
+	static state_t static_states[STATIC_STATES_CAPACITY];
+	size_t states_capacity = STATIC_STATES_CAPACITY;
+	state_t * states = static_states;
+	state_t * state = states;
 	patchdep_t * dep;
-	assert(empty_after->type == EMPTY && !empty_after->block);
+
 	assert(block);
+  recurse_enter:
+	assert(empty_after->type == EMPTY && !empty_after->block);
 	for(dep = empty_after->afters; dep; dep = dep->after.next)
 	{
+		/* watch out not to use this local variable after a return from "recursion" */
 		patch_t * after = dep->after.desc;
 		if(!after->block)
 		{
 			assert(after->type == EMPTY);
-			/* XXX: stack usage */
-			propagate_extern_after_change_thru_empty_after(after, block, add);
+			/* Recursively propagate the extern after change; equivalent to
+			 * propagate_extern_after_change_thru_empty_after
+			 *  (after, block, add) */
+			state->empty_after = empty_after;
+			state->dep = dep;
+
+			empty_after = after;
+
+			INCREMENT_STATE(state, static_states, states, states_capacity);
+			if(state - states > 32)
+				warning("very long empty patch chain (> 32)", propagate_extern_after_thru_empties);
+			goto recurse_enter;
+
+		  recurse_resume:
+			(void) 0; /* placate compiler re deprecated end labels */
 		}
 		else if(patch_is_external(after, block))
 		{
@@ -603,23 +631,60 @@ static void propagate_extern_after_change_thru_empty_after(const patch_t * empty
 			}
 		}
 	}
+
+	if(state != &states[0])
+	{
+		state--;
+		empty_after = state->empty_after;
+		dep = state->dep;
+		goto recurse_resume;
+	}
+
+	if(states != static_states)
+		sfree(states, states_capacity * sizeof(*state));
 }
 
 /* propagate a depend add/remove through a empty before,
  * to increment extern_after_count for before's block */
-static void propagate_extern_after_change_thru_empty_before(patch_t * empty_before, const patch_t * after, bool add)
+static void propagate_extern_after_change_thru_empty_before(patch_t * empty_before, const patch_t * const after, const bool add)
 {
+	/* recursion-on-the-heap support */
+	struct state {
+		patch_t * empty_before;
+		patchdep_t * dep;
+	};
+	typedef struct state state_t;
+	static state_t static_states[STATIC_STATES_CAPACITY];
+	size_t states_capacity = STATIC_STATES_CAPACITY;
+	state_t * states = static_states;
+	state_t * state = states;
 	patchdep_t * dep;
-	assert(empty_before->type == EMPTY && !empty_before->block);
+
 	assert(after->type != EMPTY);
+  recurse_enter:
+	assert(empty_before->type == EMPTY && !empty_before->block);
 	for(dep = empty_before->befores; dep; dep = dep->before.next)
 	{
+		/* watch out not to use this local variable after a return from "recursion" */
 		patch_t * before = dep->before.desc;
 		if(!before->block)
 		{
 			assert(before->type == EMPTY);
-			/* XXX: stack usage */
-			propagate_extern_after_change_thru_empty_before(before, after, add);
+			/* Recursively propagate the extern after change; equivalent to
+			 * propagate_extern_after_change_thru_empty_before
+			 *  (before, after, add) */
+			state->empty_before = empty_before;
+			state->dep = dep;
+
+			empty_before = before;
+
+			INCREMENT_STATE(state, static_states, states, states_capacity);
+			if(state - states > 32)
+				warning("very long empty patch chain (> 32)", propagate_extern_after_thru_empties);
+			goto recurse_enter;
+
+		  recurse_resume:
+			(void) 0; /* placate compiler re deprecated end labels */
 		}
 		else if(patch_is_external(after, before->block) && !(before->flags & PATCH_INFLIGHT))
 		{
@@ -635,6 +700,17 @@ static void propagate_extern_after_change_thru_empty_before(patch_t * empty_befo
 			}
 		}
 	}
+
+	if(state != &states[0])
+	{
+		state--;
+		empty_before = state->empty_before;
+		dep = state->dep;
+		goto recurse_resume;
+	}
+
+	if(states != static_states)
+		sfree(states, states_capacity * sizeof(*state));
 }
 
 /* Return whether patch has any afters that are on a block */
@@ -676,7 +752,7 @@ static inline void propagate_extern_after_change(patch_t * after, patch_t * befo
 			propagate_extern_after_change_thru_empty_after(after, before->block, add);
 		else if(after->afters && before->befores)
 		{
-			/* If both after and before are emptys and after has an on-block
+			/* If both after and before are empties and after has an on-block
 			 * after and before an on-block before then we need to update the
 			 * extern after count for each of before's on-block befores,
 			 * updating for each of after's on-block afters.
@@ -686,7 +762,7 @@ static inline void propagate_extern_after_change(patch_t * after, patch_t * befo
 			 * We assert 'either no on-block afters or befores', instead
 			 * of the simpler assert 'either no afters or befores', because
 			 * move_befores_for_merge() can remove the dependency between
-			 * two emptys with the after having afters, before having
+			 * two empties with the after having afters, before having
 			 * befores, but the after not having any on-block afters. */
 			assert(!has_block_afters(after) || !has_block_befores(before));
 		}
@@ -1685,9 +1761,9 @@ static void merge_rbs(bdesc_t * block)
 	patch_unlink_overlap(merger);
 	patch_link_overlap(merger);
 	
-	/* convert non-merger data patches into emptys so that pointers to them
+	/* convert non-merger data patches into empties so that pointers to them
 	 * remain valid.
-	 * TODO: could we destroy the emptys with no afters after the runloop? */
+	 * TODO: could we destroy the empties with no afters after the runloop? */
 	/* part a: unpropagate extern after counts (no more data patch afters)
 	 * (do before rest of conversion to correctly (not) recurse) */
 	for(patch = block->all_patches; patch; patch = patch->ddesc_next)
@@ -1716,7 +1792,7 @@ static void merge_rbs(bdesc_t * block)
 			}
 		}
 	}
-	/* parb b: convert into emptys */
+	/* part b: convert into empties */
 	for(patch = block->all_patches; patch; patch = next)
 	{
 		uint16_t level;
