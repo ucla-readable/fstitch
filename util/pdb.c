@@ -2,9 +2,6 @@
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
-#define _LARGEFILE_SOURCE
-#define _FILE_OFFSET_BITS 64
-
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -718,6 +715,7 @@ int main(int argc, char * argv[])
 		free(line);
 	else
 		printf("\n");
+	reset_state();
 	free_ops();
 	return 0;
 }

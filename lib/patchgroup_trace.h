@@ -54,7 +54,7 @@ struct pgt_label {
 	struct pgt_all all;
 	patchgroup_id_t id;
 	int label_len;
-	/* not null-terminated */
+	/* not null-terminated in the file */
 	char label[0];
 } __attribute__((packed));
 
