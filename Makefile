@@ -61,7 +61,7 @@ kfstitchd.ko: always
 install: kfstitchd.ko
 	$(MAKE) -C $(KERNELPATH) M=$(shell pwd) modules_install
 
-$(OBJDIR)/lib/libpatchgroup.so: lib/kernel-patchgroup.c
+$(OBJDIR)/lib/libpatchgroup.so: lib/kernel-patchgroup.c lib/patchgroup_trace.h fscore/kernel_patchgroup_ioctl.h fscore/patchgroup.h
 	@echo + cc[LIB] $<
 	@mkdir -p $(@D)
 	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -std=gnu99 -g -o $@ $< -shared
