@@ -17,6 +17,12 @@
 4	string		KDB_		Old Kudos debug trace data (prior to r1289)
 
 
+# Patchgroup debug trace information
+
+0	long		0x5BB3BD6D	Patchgroup debug trace data
+>4	long		x		(version %u)
+
+
 # Waffle file system
 
 4096	lelong		0x3AFF1EF5	Waffle file system image
