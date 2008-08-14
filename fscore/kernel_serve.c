@@ -294,7 +294,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_UID, sizeof(inode->i_uid), &inode->i_uid);
 		if (r < 0)
-			fprintf(stderr, "%s: file system at \"%s\" claimed UID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed UID but get_metadata returned %d\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(inode->i_uid));
 	}
@@ -305,7 +305,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_GID, sizeof(inode->i_gid), &inode->i_gid);
 		if (r < 0)
-			fprintf(stderr, "%s: file system at \"%s\" claimed GID but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed GID but get_metadata returned %d\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(inode->i_gid));
 	}
@@ -317,7 +317,7 @@ static void read_inode_withlock(struct inode * inode)
 		uint16_t fstitch_mode;
 		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_UNIX_PERM, sizeof(fstitch_mode), &fstitch_mode);
 		if (r < 0)
-			fprintf(stderr, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed unix permissions but get_metadata returned %d\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 		{
 			assert(r == sizeof(inode->i_mode));
@@ -329,7 +329,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_MTIME, sizeof(inode->i_mtime.tv_sec), &inode->i_mtime.tv_sec);
 		if (r < 0)
-			fprintf(stderr, "%s: file system at \"%s\" claimed mtime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed mtime but get_metadata returned %d\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(inode->i_mtime.tv_sec));
 	}
@@ -341,7 +341,7 @@ static void read_inode_withlock(struct inode * inode)
 	{
 		r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_ATIME, sizeof(inode->i_atime.tv_sec), &inode->i_atime.tv_sec);
 		if (r < 0)
-			fprintf(stderr, "%s: file system at \"%s\" claimed atime but get_metadata returned %i\n", __FUNCTION__, modman_name_cfs(cfs), r);
+			fprintf(stderr, "%s: file system at \"%s\" claimed atime but get_metadata returned %d\n", __FUNCTION__, modman_name_cfs(cfs), r);
 		else
 			assert(r == sizeof(inode->i_atime.tv_sec));
 	}
@@ -801,18 +801,18 @@ static int serve_setattr(struct dentry * dentry, struct iattr * attr)
 	{
 		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_MTIME;
 		if(attr->ia_valid & ATTR_MTIME_SET)
-			fsm[nfsm].fsm_value.u = now.tv_sec;
-		else
 			fsm[nfsm].fsm_value.u = attr->ia_mtime.tv_sec;
+		else
+			fsm[nfsm].fsm_value.u = now.tv_sec;
 		nfsm++;
 	}
 	if(attr->ia_valid & (ATTR_ATIME | ATTR_ATIME_SET))
 	{
 		fsm[nfsm].fsm_feature = FSTITCH_FEATURE_ATIME;
 		if(attr->ia_valid & ATTR_ATIME_SET)
-			fsm[nfsm].fsm_value.u = now.tv_sec;
-		else
 			fsm[nfsm].fsm_value.u = attr->ia_atime.tv_sec;
+		else
+			fsm[nfsm].fsm_value.u = now.tv_sec;
 		nfsm++;
 	}
 
@@ -1263,7 +1263,37 @@ static ssize_t serve_write_page(struct file * filp, loff_t pos, struct page * pa
 	written = CALL(cfs, write, fdesc, page, buf, pos, len);
 	if (written >= 0)
 	{
-		inode->i_mtime = inode->i_atime = current_fs_time(inode->i_sb);
+		if (feature_supported(cfs, FSTITCH_FEATURE_MTIME))
+		{
+			uint32_t mtime;
+			int r = CALL(cfs, get_metadata, inode->i_ino, FSTITCH_FEATURE_MTIME, sizeof(mtime), &mtime);
+			if (r >= 0)
+			{
+				assert(r == sizeof(mtime));
+				/* HACK: if the mtime is in the future, then don't update it:
+				 * this allows us an easy way to tell the file system not to
+				 * make unnecessary changes to the inode, which can interfere
+				 * with patchgroups pretty badly in some cases */
+				if (mtime > inode->i_mtime.tv_sec)
+					inode->i_mtime.tv_sec = mtime;
+				else
+				{
+					fsmetadata_t fsm;
+					fsm.fsm_feature = FSTITCH_FEATURE_MTIME;
+					fsm.fsm_value.u = inode->i_mtime.tv_sec;
+					if (CALL(cfs, set_metadata2, inode->i_ino, &fsm, 1) < 0)
+						inode->i_mtime = (struct timespec) {0, 0};
+				}
+			}
+			else
+			{
+				fprintf(stderr, "%s: file system at \"%s\" claimed mtime but get_metadata returned %d\n", __FUNCTION__, modman_name_cfs(cfs), r);
+				inode->i_mtime = (struct timespec) {0, 0};
+			}
+		}
+		else
+			inode->i_mtime = (struct timespec) {0, 0};
+
 		pos += written;
 		if (pos > inode->i_size)
 			inode->i_size = pos;
