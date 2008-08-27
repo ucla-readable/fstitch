@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -6,7 +6,7 @@
 #define __FSTITCH_FSCORE_TYPES_H
 
 /* Provide weak reference callbacks */
-#define PATCH_WEAKREF_CALLBACKS 0
+#define PATCH_WEAKREF_CALLBACKS 1
 
 typedef struct bdesc bdesc_t;
 /* struct page pointers are non-NULL only in __KERNEL__ */
