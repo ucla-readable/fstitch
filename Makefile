@@ -64,7 +64,7 @@ install: kfstitchd.ko
 $(OBJDIR)/lib/libpatchgroup.so: lib/kernel-patchgroup.c lib/patchgroup_trace.h fscore/kernel_patchgroup_ioctl.h fscore/patchgroup.h
 	@echo + cc[LIB] $<
 	@mkdir -p $(@D)
-	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -std=gnu99 -g -o $@ $< -shared
+	$(V)$(CC) -DKERNEL_USER -I. $(CFLAGS) -fpic -std=gnu99 -g -o $@ $< -shared
 
 # Include Makefrags for subdirectories
 include images/Makefrag
