@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -14,8 +14,8 @@ void patch_mark_graph(patch_t * root)
 	root->flags |= PATCH_MARKED;
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_SET_FLAGS, root, PATCH_MARKED);
 	for(dep = root->befores; dep; dep = dep->before.next)
-		if(!(dep->before.desc->flags & PATCH_MARKED))
-			patch_mark_graph(dep->before.desc);
+		if(!(dep->before.patch->flags & PATCH_MARKED))
+			patch_mark_graph(dep->before.patch);
 }
 
 void patch_unmark_graph(patch_t * root)
@@ -24,8 +24,8 @@ void patch_unmark_graph(patch_t * root)
 	root->flags &= ~PATCH_MARKED;
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_CLEAR_FLAGS, root, PATCH_MARKED);
 	for(dep = root->befores; dep; dep = dep->before.next)
-		if(dep->before.desc->flags & PATCH_MARKED)
-			patch_unmark_graph(dep->before.desc);
+		if(dep->before.patch->flags & PATCH_MARKED)
+			patch_unmark_graph(dep->before.patch);
 }
 
 int patch_push_down(bdesc_t * block, BD_t * current_bd, BD_t * target_bd)

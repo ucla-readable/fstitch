@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -49,7 +49,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 		
 		while(*deps)
 		{
-			patch_t * dep = (*deps)->before.desc;
+			patch_t * dep = (*deps)->before.patch;
 			/* if it's the write head, or if it's on the same block, leave it alone */
 			if(dep == write_head || (dep->block && dep->block->ddesc == block->ddesc))
 			{
@@ -81,7 +81,7 @@ static int unlink_bd_write_block(BD_t * object, bdesc_t * block, uint32_t number
 			/* WARNING: see warning above */
 			deps = &patch->afters;
 			while(*deps)
-				if(((*deps)->after.desc->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.desc->type == EMPTY)
+				if(((*deps)->after.patch->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.patch->type == EMPTY)
 					patch_dep_remove(*deps);
 				else
 					deps = &(*deps)->before.next;

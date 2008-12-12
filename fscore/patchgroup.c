@@ -320,7 +320,7 @@ int patchgroup_add_depend(patchgroup_t * after, patchgroup_t * before)
 		/* for efficiency, when that head and tail are not already connected
 		 * transitively: that is, head has only head_keep as a before */
 		if(WEAK(before->head)->befores && !WEAK(before->head)->befores->before.next &&
-		   WEAK(before->head)->befores->before.desc == before->head_keep)
+		   WEAK(before->head)->befores->before.patch == before->head_keep)
 		{
 			r = patch_add_depend(WEAK(before->head), WEAK(before->tail));
 			if(r < 0)
@@ -381,7 +381,7 @@ static int patchgroup_update_top_bottom(const patchgroup_state_t * changed_state
 	
 	/* when top has only top_keep as a before, then don't bother attaching any heads to it */
 	if(save_top && (save_top->befores->before.next ||
-	   save_top->befores->before.desc != current_scope->top_keep))
+	   save_top->befores->before.patch != current_scope->top_keep))
 	{
 		/* attach heads to top only when done with top so
 		 * that top can gain befores along the way */
@@ -672,10 +672,10 @@ int patchgroup_prepare_head(patch_t ** head)
 	{
 		int r;
 		/* heuristic: does *head already depend on bottom as the first dependency? */
-		if((*head)->befores && (*head)->befores->before.desc == WEAK(current_scope->bottom))
+		if((*head)->befores && (*head)->befores->before.patch == WEAK(current_scope->bottom))
 			return 0;
 		/* heuristic: does bottom already depend on *head as the first dependency? */
-		if(WEAK(current_scope->bottom)->befores && WEAK(current_scope->bottom)->befores->before.desc == *head)
+		if(WEAK(current_scope->bottom)->befores && WEAK(current_scope->bottom)->befores->before.patch == *head)
 		{
 			*head = WEAK(current_scope->bottom);
 			return 0;

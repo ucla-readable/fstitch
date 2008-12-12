@@ -463,7 +463,7 @@ static void propagate_level_change_thru_empty(patch_t * empty_after, uint16_t pr
 	patchdep_t * empties_afters = empty_after->afters;
 	for(; empties_afters; empties_afters = empties_afters->after.next)
 	{
-		patch_t * after = empties_afters->after.desc;
+		patch_t * after = empties_afters->after.patch;
 		uint16_t after_prev_level = patch_level(after);
 
 		if(prev_level != BDLEVEL_NONE)
@@ -597,7 +597,7 @@ static void propagate_extern_after_change_thru_empty_after(const patch_t * empty
 	for(dep = empty_after->afters; dep; dep = dep->after.next)
 	{
 		/* watch out not to use this local variable after a return from "recursion" */
-		patch_t * after = dep->after.desc;
+		patch_t * after = dep->after.patch;
 		if(!after->block)
 		{
 			assert(after->type == EMPTY);
@@ -666,7 +666,7 @@ static void propagate_extern_after_change_thru_empty_before(patch_t * empty_befo
 	for(dep = empty_before->befores; dep; dep = dep->before.next)
 	{
 		/* watch out not to use this local variable after a return from "recursion" */
-		patch_t * before = dep->before.desc;
+		patch_t * before = dep->before.patch;
 		if(!before->block)
 		{
 			assert(before->type == EMPTY);
@@ -719,10 +719,10 @@ static bool has_block_afters(const patch_t * patch)
 	const patchdep_t * dep;
 	for(dep = patch->afters; dep; dep = dep->after.next)
 	{
-		if(dep->after.desc->block)
+		if(dep->after.patch->block)
 			return 1;
 		/* XXX: stack usage */
-		else if(has_block_afters(dep->after.desc))
+		else if(has_block_afters(dep->after.patch))
 			return 1;
 	}
 	return 0;
@@ -734,10 +734,10 @@ static bool has_block_befores(const patch_t * patch)
 	const patchdep_t * dep;
 	for(dep = patch->befores; dep; dep = dep->before.next)
 	{
-		if(dep->before.desc->block)
+		if(dep->before.patch->block)
 			return 1;
 		/* XXX: stack usage */
-		else if(has_block_befores(dep->before.desc))
+		else if(has_block_befores(dep->before.patch))
 			return 1;
 	}
 	return 0;
@@ -839,7 +839,7 @@ void patch_propagate_level_change(patch_t * patch, uint16_t prev_level, uint16_t
 	assert(prev_level != new_level);
 	for(; afters; afters = afters->after.next)
 	{
-		patch_t * after = afters->after.desc;
+		patch_t * after = afters->after.patch;
 		uint16_t after_prev_level = patch_level(after);
 
 		if(prev_level != BDLEVEL_NONE)
@@ -908,14 +908,14 @@ int patch_add_depend_no_cycles(patch_t * after, patch_t * before)
 		assert(dep->desc != after);
 #else
 	/* how frequently do these happen? more frequently than you'd think! */
-	if(before->afters && before->afters->after.desc == after)
+	if(before->afters && before->afters->after.patch == after)
 		return 0;
-	if(after->befores && after->befores->before.desc == before)
+	if(after->befores && after->befores->before.patch == before)
 		return 0;
 	
-	if(before->afters && container_of(before->afters_tail, patchdep_t, after.next)->after.desc == after)
+	if(before->afters && container_of(before->afters_tail, patchdep_t, after.next)->after.patch == after)
 		return 0;
-	if(after->befores && container_of(after->befores_tail, patchdep_t, before.next)->before.desc == before)
+	if(after->befores && container_of(after->befores_tail, patchdep_t, before.next)->before.patch == before)
 		return 0;
 #endif
 	
@@ -925,7 +925,7 @@ int patch_add_depend_no_cycles(patch_t * after, patch_t * before)
 		assert(before->type == EMPTY);
 		assert(!before->afters);
 		for(dep = before->befores; dep; dep = dep->before.next)
-			if((r = patch_add_depend_no_cycles(after, dep->before.desc)) < 0)
+			if((r = patch_add_depend_no_cycles(after, dep->before.patch)) < 0)
 				break;
 		return r;
 	}
@@ -939,7 +939,7 @@ int patch_add_depend_no_cycles(patch_t * after, patch_t * before)
 	
 	/* add the before to the after */
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_ADD_BEFORE, after, before);
-	dep->before.desc = before;
+	dep->before.patch = before;
 	dep->before.next = NULL;
 	dep->before.ptr = after->befores_tail;
 	*after->befores_tail = dep;
@@ -947,7 +947,7 @@ int patch_add_depend_no_cycles(patch_t * after, patch_t * before)
 	
 	/* add the after to the before */
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_ADD_AFTER, before, after);
-	dep->after.desc = after;
+	dep->after.patch = after;
 	dep->after.next = NULL;
 	dep->after.ptr = before->afters_tail;
 	*before->afters_tail = dep;
@@ -970,13 +970,13 @@ static inline bool quick_depends_on(const patch_t * after, const patch_t * befor
 	/* Quick (bidirectional width-2) check for after->before */
 	if(!after->befores || !before->afters)
 		return 0;
-	if(before->afters->after.desc == after)
+	if(before->afters->after.patch == after)
 		return 1;
-	if(before->afters->after.next && before->afters->after.next->after.desc == after)
+	if(before->afters->after.next && before->afters->after.next->after.patch == after)
 		return 1;
-	if(after->befores->before.desc == before)
+	if(after->befores->before.patch == before)
 		return 1;
-	if(after->befores->before.next && after->befores->before.next->before.desc == before)
+	if(after->befores->before.next && after->befores->before.next->before.patch == before)
 		return 1;
 	return 0; /* No after->before found */
 }
@@ -1048,7 +1048,7 @@ static int _patch_overlap_multiattach(patch_t * patch, patch_t * list_patch)
 		 * prefetch the next pointer at the top of the loop */
 		next = list->before.next;
 		
-		list_patch = list->before.desc;
+		list_patch = list->before.patch;
 		
 		if(patch == list_patch)
 			continue;
@@ -1099,7 +1099,7 @@ static int patch_overlap_multiattach(patch_t * patch, bdesc_t * block)
 		{
 			patch_t * bit_patches = it.val;
 			int r;
-			if(patch_overlap_check(patch, bit_patches->befores->before.desc))
+			if(patch_overlap_check(patch, bit_patches->befores->before.patch))
 				if((r = _patch_overlap_multiattach(patch, bit_patches)) < 0)
 					return r;
 		}
@@ -1141,7 +1141,7 @@ static patch_t *patch_find_overlaps(bdesc_t * block, uint32_t offset, uint32_t l
 				continue;
 			patchdep_t *dep;
 			for (dep = c->befores; dep; dep = dep->before.next) {
-				c = dep->before.desc;
+				c = dep->before.patch;
 				if (!(mask & c->bit.or))
 					continue;
 				if (oprev && quick_depends_on(oprev, c))
@@ -1486,7 +1486,7 @@ static patch_t * select_patch_merger(const bdesc_t * block)
 
 static void patch_move_before_fast(patch_t * old_after, patch_t * new_after, patchdep_t * depbefore)
 {
-	patch_t * before = depbefore->before.desc;
+	patch_t * before = depbefore->before.patch;
 	int r;
 	patch_dep_remove(depbefore);
 	r = patch_add_depend_no_cycles(new_after, before);
@@ -1565,7 +1565,7 @@ static void move_befores_for_merge(patch_t * patch, patch_t * merge_target, bool
 		state->patch = patch;
 		state->reachable = reachable;
 		
-		patch = dep->before.desc;
+		patch = dep->before.patch;
 		reachable = 0;
 		
 		INCREMENT_STATE(state, static_states, states, states_capacity);
@@ -1590,7 +1590,7 @@ static void move_befores_for_merge(patch_t * patch, patch_t * merge_target, bool
 		for(dep = patch->befores; dep; dep = next)
 		{
 			next = dep->before.next;
-			if(!dep->before.desc->tmp_pprev)
+			if(!dep->before.patch->tmp_pprev)
 				patch_move_before_fast(patch, merge_target, dep);
 		}
 	}
@@ -1631,7 +1631,7 @@ static void move_befores_for_merge(patch_t * patch, patch_t * merge_target, bool
 			patchdep_t * next;
 			for(dep = patch->befores; dep; dep = next)
 			{
-				patch_t * before = dep->before.desc;
+				patch_t * before = dep->before.patch;
 				next = dep->before.next;
 				if(patch_is_external(before, merge_target->block) || (before->flags & PATCH_INFLIGHT))
 					patch_move_before_fast(patch, merge_target, dep);
@@ -1651,7 +1651,7 @@ static bool patch_has_block_befores(const patch_t * after, const bdesc_t * bdesc
 	patchdep_t * dep;
 	for(dep = after->befores; dep; dep = dep->before.next)
 	{
-		const patch_t * before = dep->before.desc;
+		const patch_t * before = dep->before.patch;
 		if(patch_is_external(before, bdesc) || (before->flags & PATCH_INFLIGHT))
 			continue;
 		if(before->type != EMPTY)
@@ -1773,7 +1773,7 @@ static void merge_rbs(bdesc_t * block)
 			continue;
 		for(dep = patch->befores; dep; dep = next)
 		{
-			patch_t * before = dep->before.desc;
+			patch_t * before = dep->before.patch;
 			next = dep->before.next;
 			if(before->flags & PATCH_INFLIGHT)
 				continue;
@@ -1914,7 +1914,7 @@ static bool quick_befores_subset(const patch_t * left, const patch_t * right)
 	{
 		if (i >= max_nleft_befores)
 			return 0;
-		if(!quick_depends_on(right, left_dep->before.desc))
+		if(!quick_depends_on(right, left_dep->before.patch))
 			return 0;
 	}
 	return 1;
@@ -2175,13 +2175,13 @@ static recursive_inline bool patch_may_have_before(const patch_t * after, const 
 	{
 		if(i >= MAX_DIRECT_BEFORES)
 			return 1;
-		if(dep->before.desc == before)
+		if(dep->before.patch == before)
 			return 1;
-		if(dep->before.desc->befores)
+		if(dep->before.patch->befores)
 		{
 			if(depth >= MAX_DEPTH)
 				return 1;
-			if(patch_may_have_before(dep->before.desc, before, depth + 1))
+			if(patch_may_have_before(dep->before.patch, before, depth + 1))
 				return 1;
 		}
 	}
@@ -2580,13 +2580,13 @@ static bool merge_head_dep_safe(const patch_t * head, const patch_t * merge)
 		size_t j = 0;
 		for(; merge_b && j < MAX_WIDTH; merge_b = merge_b->before.next)
 		{
-			patchdep_t * merge_b_b = merge_b->before.desc->befores;
+			patchdep_t * merge_b_b = merge_b->before.patch->befores;
 			size_t k = 0;
 			for(; merge_b_b && k < MAX_WIDTH; merge_b_b = merge_b_b->before.next)
 			{
-				if(head_b->before.desc == merge_b_b->before.desc)
+				if(head_b->before.patch == merge_b_b->before.patch)
 				{
-					common[common_index++] = head_b->before.desc;
+					common[common_index++] = head_b->before.patch;
 					if(common_index > MAX_WIDTH)
 					{
 						DEF_WARNING(warn, 1);
@@ -2606,7 +2606,7 @@ static bool merge_head_dep_safe(const patch_t * head, const patch_t * merge)
 	/* Check for head~>merge paths */
 	for(head_b = head->befores; head_b; head_b = head_b->before.next)
 	{
-		patch_t * before = head_b->before.desc;
+		patch_t * before = head_b->before.patch;
 		for(i = 0; i < MAX_WIDTH; i++)
 			if(before == common[i])
 				break;
@@ -2619,7 +2619,7 @@ static bool merge_head_dep_safe(const patch_t * head, const patch_t * merge)
 			if(before->befores->before.next)
 				return 0;
 			for(i = 0; i < MAX_WIDTH; i++)
-				if(before->befores->before.desc == common[i])
+				if(before->befores->before.patch == common[i])
 					break;
 			if(i == MAX_WIDTH)
 				return 0;
@@ -2637,9 +2637,9 @@ static bool bit_merge_overlap_ok_head(const patch_t * head, const patch_t * over
 		/* Check whether creating overlap->head may induce a cycle.
 		 * If overlap->head already exists the answer is of course no: */
 		if(!(overlap->befores
-		     && (overlap->befores->before.desc == head
+		     && (overlap->befores->before.patch == head
 		         || (overlap->befores->before.next
-		             && overlap->befores->before.next->before.desc == head))))
+		             && overlap->befores->before.next->before.patch == head))))
 		{
 			/* We did not detect that overlap->head already exists,
 			 * so see if head->overlap cannot exist: */
@@ -2663,7 +2663,7 @@ static int patch_create_bit_merge_overlap(BD_t * owner, uint32_t xor, patch_t * 
 	
 	for(dep = bit_patches->befores; dep; dep = dep->before.next)
 	{
-		patch_t * before = dep->before.desc;
+		patch_t * before = dep->before.patch;
 		if(before->flags & (PATCH_WRITTEN | PATCH_INFLIGHT))
 			continue;
 		overlap_word = overlap_word ? (patch_t *) 1 : before;
@@ -2736,7 +2736,7 @@ static bool has_inram_befores(const patch_t * patch)
 {
 	patchdep_t * dep;
 	for(dep = patch->befores; dep; dep = dep->before.next)
-		if(!(dep->before.desc->flags & PATCH_INFLIGHT))
+		if(!(dep->before.patch->flags & PATCH_INFLIGHT))
 			return 1;
 	return 0;
 }
@@ -2958,25 +2958,25 @@ static int patch_has_before(patch_t * after, patch_t * before)
 
 void patch_dep_remove(patchdep_t * dep)
 {
-	propagate_depend_remove(dep->after.desc, dep->before.desc);
+	propagate_depend_remove(dep->after.patch, dep->before.patch);
 	
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_REM_BEFORE, dep->after.desc, dep->before.desc);
 	*dep->before.ptr = dep->before.next;
 	if(dep->before.next)
 		dep->before.next->before.ptr = dep->before.ptr;
 	else
-		dep->after.desc->befores_tail = dep->before.ptr;
+		dep->after.patch->befores_tail = dep->before.ptr;
 	
 	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_REM_AFTER, dep->before.desc, dep->after.desc);
 	*dep->after.ptr = dep->after.next;
 	if(dep->after.next)
 		dep->after.next->after.ptr = dep->after.ptr;
 	else
-		dep->before.desc->afters_tail = dep->after.ptr;
+		dep->before.patch->afters_tail = dep->after.ptr;
 	
-	if(dep->after.desc->type == EMPTY && !dep->after.desc->befores)
+	if(dep->after.patch->type == EMPTY && !dep->after.patch->befores)
 		/* we just removed the last before of a EMPTY patch, so satisfy it */
-		patch_satisfy(&dep->after.desc);
+		patch_satisfy(&dep->after.patch);
 
 #if 0 /* YOU_HAVE_TIME_TO_WASTE */
 	memset(dep, 0, sizeof(*dep));
@@ -2990,15 +2990,15 @@ void patch_remove_depend(patch_t * after, patch_t * before)
 	patchdep_t * scan_befores = after->befores;
 	patchdep_t * scan_afters = before->afters;
 	while(scan_befores && scan_afters &&
-	      scan_befores->before.desc != before &&
-	      scan_afters->after.desc != after)
+	      scan_befores->before.patch != before &&
+	      scan_afters->after.patch != after)
 	{
 		scan_befores = scan_befores->before.next;
 		scan_afters = scan_afters->after.next;
 	}
-	if(scan_befores && scan_befores->before.desc == before)
+	if(scan_befores && scan_befores->before.patch == before)
 		patch_dep_remove(scan_befores);
-	else if(scan_afters && scan_afters->after.desc == after)
+	else if(scan_afters && scan_afters->after.patch == after)
 		patch_dep_remove(scan_afters);
 }
 
@@ -3153,7 +3153,7 @@ void patch_set_inflight(patch_t * patch)
 	 * optimizations (eg allow a new NRB on patch's block).
 	 * propagate_depend_remove() takes this pre-decrement into account. */
 	for(dep = patch->afters; dep; dep = dep->after.next)
-		propagate_extern_after_change(dep->after.desc, patch, 0);
+		propagate_extern_after_change(dep->after.patch, patch, 0);
 #endif
 	
 #if PATCH_NRB

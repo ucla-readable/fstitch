@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -50,14 +50,14 @@ static void dump_revision_loop_state(bdesc_t * block, int count, patch_t ** patc
 		for(scan = patches[i]->afters; scan; scan = scan->after.next)
 		{
 			total++;
-			if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
+			if(!scan->after.patch->block || scan->after.patch->block->ddesc != block->ddesc)
 				continue;
-			fprintf(stderr, " %p [%d, %x]", scan->after.desc, scan->after.desc->type, scan->after.desc->flags);
-			if(!patch_is_rollbackable(scan->after.desc))
+			fprintf(stderr, " %p [%d, %x]", scan->after.patch, scan->after.patch->type, scan->after.patch->flags);
+			if(!patch_is_rollbackable(scan->after.patch))
 				fprintf(stderr, "!");
-			if(patch_overlap_check(scan->after.desc, patches[i]))
+			if(patch_overlap_check(scan->after.patch, patches[i]))
 				fprintf(stderr, "*");
-			if(scan->after.desc->block->in_flight)
+			if(scan->after.patch->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")%d (->", total);
@@ -65,25 +65,25 @@ static void dump_revision_loop_state(bdesc_t * block, int count, patch_t ** patc
 		for(scan = patches[i]->befores; scan; scan = scan->before.next)
 		{
 			total++;
-			if(!scan->before.desc->block || scan->before.desc->block->ddesc != block->ddesc)
+			if(!scan->before.patch->block || scan->before.patch->block->ddesc != block->ddesc)
 				continue;
-			fprintf(stderr, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
-			if(!patch_is_rollbackable(scan->before.desc))
+			fprintf(stderr, " %p [%d, %x]", scan->before.patch, scan->before.patch->type, scan->before.patch->flags);
+			if(!patch_is_rollbackable(scan->before.patch))
 				fprintf(stderr, "!");
-			if(patch_overlap_check(scan->before.desc, patches[i]))
+			if(patch_overlap_check(scan->before.patch, patches[i]))
 				fprintf(stderr, "*");
-			if(scan->before.desc->block->in_flight)
+			if(scan->before.patch->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")%d (-->", total);
 		for(scan = patches[i]->befores; scan; scan = scan->before.next)
 		{
-			if(!scan->before.desc->block || scan->before.desc->block->ddesc == block->ddesc)
+			if(!scan->before.patch->block || scan->before.patch->block->ddesc == block->ddesc)
 				continue;
-			fprintf(stderr, " %p [%d, %x]", scan->before.desc, scan->before.desc->type, scan->before.desc->flags);
-			if(!patch_is_rollbackable(scan->before.desc))
+			fprintf(stderr, " %p [%d, %x]", scan->before.patch, scan->before.patch->type, scan->before.patch->flags);
+			if(!patch_is_rollbackable(scan->before.patch))
 				fprintf(stderr, "!");
-			if(scan->before.desc->block->in_flight)
+			if(scan->before.patch->block->in_flight)
 				fprintf(stderr, "^");
 		}
 		fprintf(stderr, ")\n");
@@ -169,11 +169,11 @@ static int _revision_tail_prepare(bdesc_t * block, uint8_t * buffer, enum decide
 			/* check for overlapping, non-rolled back patches above us */
 			for(scan = patches[i]->afters; scan; scan = scan->after.next)
 			{
-				if(scan->after.desc->flags & PATCH_ROLLBACK)
+				if(scan->after.patch->flags & PATCH_ROLLBACK)
 					continue;
-				if(!scan->after.desc->block || scan->after.desc->block->ddesc != block->ddesc)
+				if(!scan->after.patch->block || scan->after.patch->block->ddesc != block->ddesc)
 					continue;
-				if(patch_overlap_check(scan->after.desc, patches[i]))
+				if(patch_overlap_check(scan->after.patch, patches[i]))
 					break;
 			}
 			if(scan)

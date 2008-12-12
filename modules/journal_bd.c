@@ -604,9 +604,9 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 					break;
 				for(dep = patch->befores; dep; dep = dep->before.next)
 				{
-					if(dep->before.desc == info->hold)
+					if(dep->before.patch == info->hold)
 						continue;
-					if(dep->before.desc->block != block)
+					if(dep->before.patch->block != block)
 						break;
 				}
 				if(dep)
@@ -669,7 +669,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 			
 			while(*deps)
 			{
-				patch_t * dep = (*deps)->before.desc;
+				patch_t * dep = (*deps)->before.patch;
 				/* if it's hold, or if it's on the same block, leave it alone */
 				if(dep == info->hold || (dep->block && dep->block->ddesc == block->ddesc))
 				{
@@ -702,7 +702,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 			/* WARNING: see warning above */
 			deps = &patch->afters;
 			while(*deps)
-				if(((*deps)->after.desc->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.desc->type == EMPTY)
+				if(((*deps)->after.patch->flags & PATCH_NO_PATCHGROUP) && (*deps)->after.patch->type == EMPTY)
 					patch_dep_remove(*deps);
 				else
 					deps = &(*deps)->after.next;
@@ -739,7 +739,7 @@ static int journal_bd_write_block(BD_t * object, bdesc_t * block, uint32_t block
 			{
 				patchdep_t * befores;
 				for(befores = journal_block->all_patches->befores; befores; befores = befores->before.next)
-					if(befores->before.desc == head)
+					if(befores->before.patch == head)
 						break;
 				assert(befores);
 			}
