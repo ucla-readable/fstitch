@@ -2960,14 +2960,14 @@ void patch_dep_remove(patchdep_t * dep)
 {
 	propagate_depend_remove(dep->after.patch, dep->before.patch);
 	
-	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_REM_BEFORE, dep->after.desc, dep->before.desc);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_REM_BEFORE, dep->after.patch, dep->before.patch);
 	*dep->before.ptr = dep->before.next;
 	if(dep->before.next)
 		dep->before.next->before.ptr = dep->before.ptr;
 	else
 		dep->after.patch->befores_tail = dep->before.ptr;
 	
-	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_REM_AFTER, dep->before.desc, dep->after.desc);
+	FSTITCH_DEBUG_SEND(FDB_MODULE_PATCH_ALTER, FDB_PATCH_REM_AFTER, dep->before.patch, dep->after.patch);
 	*dep->after.ptr = dep->after.next;
 	if(dep->after.next)
 		dep->after.next->after.ptr = dep->after.ptr;
