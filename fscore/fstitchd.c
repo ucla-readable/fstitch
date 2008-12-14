@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -280,6 +280,9 @@ static int fstitchd_thread(void * thunk)
 {
 	int i;
 	printf("kfstitchd started (PID = %d)\n", current ? current->pid : 0);
+#if FSTITCH_DEBUG
+	printf("fstitchd_main() is at address %p\n", &fstitchd_main);
+#endif
 	daemonize("kfstitchd");
 	fstitchd_task = current;
 	spin_lock_init(&fstitchd_global_lock.lock);
