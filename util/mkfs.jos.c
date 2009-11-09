@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <inttypes.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
