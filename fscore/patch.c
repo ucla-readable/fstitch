@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2008 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2009 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -2153,16 +2153,8 @@ static int patch_create_byte_merge_overlap(patch_t ** tail, patch_t ** new, patc
 
 #else
 
-#if __GNUC__ == 4 && (__GNUC_MINOR__ == 0 || __GNUC_MINOR__ == 1)
-/* gcc 4.0, and 4.1 for the Linux kernel, detect this inlining opportunity but
- * can't handle it; older versions ignore it and newer versions support it */
-#define recursive_inline
-#else
-#define recursive_inline inline
-#endif
-
 /* Return true if after may depend on before. External callers pass depth=0. */
-static recursive_inline bool patch_may_have_before(const patch_t * after, const patch_t * before, unsigned depth)
+static bool patch_may_have_before(const patch_t * after, const patch_t * before, unsigned depth)
 {
 /* Limit the search.
  * These values do not use noticable cpu and give pretty good answers. */
