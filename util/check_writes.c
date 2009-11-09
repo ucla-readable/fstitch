@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2009 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -34,7 +34,7 @@ static void load_log(const char * log_filename)
 	size = read(fd, &writes, sizeof(writes));
 	if (size != sizeof(writes))
 	{
-		fprintf(stderr, "%s(): only read %d bytes when %d were expected\n", __FUNCTION__, size, sizeof(writes));
+		fprintf(stderr, "%s(): only read %zd bytes when %zu were expected\n", __FUNCTION__, size, (size_t) sizeof(writes));
 		exit(1);
 	}
 	if (writes.next > MAXWRITES)

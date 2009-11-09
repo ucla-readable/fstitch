@@ -1,4 +1,4 @@
-/* This file is part of Featherstitch. Featherstitch is copyright 2005-2007 The
+/* This file is part of Featherstitch. Featherstitch is copyright 2005-2009 The
  * Regents of the University of California. It is distributed under the terms of
  * version 2 of the GNU GPL. See the file LICENSE for details. */
 
@@ -101,7 +101,7 @@ static __inline void get_random_bytes(void * buf, int nbytes)
 	close(fd);
 }
 
-#ifdef __i386__
+#if defined(__i386__) && defined(__linux__)
 static __inline int find_first_zero_bit(const unsigned long * addr, unsigned size)
 {
 	int res, d0, d1, d2;
